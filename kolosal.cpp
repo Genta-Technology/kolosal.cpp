@@ -8,6 +8,7 @@
 #include <GLFW/glfw3.h>
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include "imgui_internal.h"
 
 //-----------------------------------------------------------------------------
 // [SECTION] Constants and Configurations
@@ -588,43 +589,59 @@ void renderInputField(bool& focusInputField, float inputHeight, float inputWidth
     }
 
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue |
-                                ImGuiInputTextFlags_CtrlEnterForNewLine;
+                               ImGuiInputTextFlags_CtrlEnterForNewLine;
 
     float availableWidth = ImGui::GetContentRegionAvail().x;
     float actualInputWidth = (inputWidth < availableWidth) ? inputWidth : availableWidth;
     float paddingX = (availableWidth - actualInputWidth) / Config::HALF_DIVISOR;
 
     if (paddingX > 0.0F) {
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX); // Center horizontally
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
     }
 
-    // Store the cursor position for the input field
-    ImVec2 inputFieldPos = ImGui::GetCursorScreenPos();
+    // Draw the input field
     ImVec2 inputSize = ImVec2(actualInputWidth, inputHeight);
 
-    bool isEmpty = (strlen(inputText.data()) == 0);
+    // Begin a group to keep the draw calls together
+    ImGui::BeginGroup();
 
-    // Draw the input field
     if (ImGui::InputTextMultiline("##input", inputText.data(), inputText.size(), inputSize, flags)) {
         handleInputSubmission(inputText.data(), focusInputField);
     }
 
-    // If the input field is empty, draw the placeholder text over it
+    // If the input field is empty and not focused, draw the placeholder text
+    bool isEmpty = (strlen(inputText.data()) == 0);
+    bool isFocused = ImGui::IsItemFocused();
+
     if (isEmpty) {
+        // Get the context and window information
+        ImGuiContext& g = *ImGui::GetCurrentContext();
+        ImGuiWindow* window = g.CurrentWindow;
+        
+        // Use the foreground draw list for the window
+        ImDrawList* drawList = ImGui::GetForegroundDrawList(window);
+
+        // Get the position and size of the input field
+        ImVec2 inputFieldPos = ImGui::GetItemRectMin();
+        ImVec2 inputFieldSize = ImGui::GetItemRectSize();
+
         const ImGuiStyle& style = ImGui::GetStyle();
         ImVec2 textPos = inputFieldPos;
         textPos.x += style.FramePadding.x;
         textPos.y += style.FramePadding.y;
-        ImGui::SetCursorScreenPos(textPos);  // Set cursor position to start of input field
 
         // Set the placeholder text color (light gray)
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7F, 0.7F, 0.7F, 1.0F)); // Light gray for placeholder
+        ImU32 placeholderColor = ImGui::GetColorU32(ImVec4(0.7F, 0.7F, 0.7F, 1.0F));
 
-        ImGui::TextUnformatted("Type a message and press Enter to send (Ctrl+Enter for new line)");
-
-        ImGui::PopStyleColor();  // Restore text color
-        ImGui::SetCursorScreenPos(inputFieldPos);  // Reset the cursor position back to input field
+        // Draw the placeholder text over the input field
+        drawList->AddText(
+            textPos,
+            placeholderColor,
+            "Type a message and press Enter to send (Ctrl+Enter for new line)"
+        );
     }
+
+    ImGui::EndGroup();
 
     restoreInputFieldStyle();
 }
