@@ -611,7 +611,6 @@ void renderInputField(bool& focusInputField, float inputHeight, float inputWidth
 
     // If the input field is empty and not focused, draw the placeholder text
     bool isEmpty = (strlen(inputText.data()) == 0);
-    bool isFocused = ImGui::IsItemFocused();
 
     if (isEmpty) {
         // Get the context and window information
@@ -623,7 +622,6 @@ void renderInputField(bool& focusInputField, float inputHeight, float inputWidth
 
         // Get the position and size of the input field
         ImVec2 inputFieldPos = ImGui::GetItemRectMin();
-        ImVec2 inputFieldSize = ImGui::GetItemRectSize();
 
         const ImGuiStyle& style = ImGui::GetStyle();
         ImVec2 textPos = inputFieldPos;
