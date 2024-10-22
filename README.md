@@ -1,7 +1,7 @@
 # ImGui Chatbot Application
 
 ## Overview
-Kolosal AI Desktop application let you train and inference any LLM easily on device or on cloud. Enabling you to easily download models or loras from huggingface hub or kolosal hub.
+Kolosal AI Desktop application let you train and run any LLM easily on device with easy to use UI. Enabling you to easily download models or loras from huggingface hub or kolosal hub.
 
 ## Prerequisites
 - C++17 or later
