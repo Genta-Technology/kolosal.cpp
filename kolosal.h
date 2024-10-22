@@ -62,6 +62,7 @@ namespace Config {
     constexpr float HALF_DIVISOR = 2.0F;
     constexpr float BOTTOM_MARGIN = 10.0F;
     constexpr float INPUT_HEIGHT = 100.0F;
+    constexpr float CHAT_WINDOW_CONTENT_WIDTH = 750.0F;
 }
 
 //-----------------------------------------------------------------------------
@@ -130,14 +131,14 @@ void cleanup(GLFWwindow* window);
 
 // Rendering Functions
 void renderChatWindow(bool& focusInputField, float inputHeight);
-void renderChatHistory(const ChatHistory& chatHistory);
-void renderMessage(const Message& msg, int index);
+void renderChatHistory(const ChatHistory& chatHistory, float contentWidth);
+void renderMessage(const Message& msg, int index, float contentWidth);
 void pushIDAndColors(const Message& msg, int index);
-auto calculateDimensions(const Message& msg) -> std::tuple<float, float, float, float>;
+auto calculateDimensions(const Message& msg, float windowWidth) -> std::tuple<float, float, float>;
 void renderMessageContent(const Message& msg, float bubbleWidth, float bubblePadding);
 void renderTimestamp(const Message& msg, float bubblePadding);
 void renderButtons(const Message& msg, int index, float bubbleWidth, float bubblePadding);
-void renderInputField(bool& focusInputField, float inputHeight);
+void renderInputField(bool& focusInputField, float inputHeight, float inputWidth);
 void setInputFieldStyle();
 void restoreInputFieldStyle();
 void handleInputSubmission(char* inputText, bool& focusInputField);
