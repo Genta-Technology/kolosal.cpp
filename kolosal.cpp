@@ -330,7 +330,7 @@ void renderTimestamp(const Message& msg, float bubblePadding) {
     // Set timestamp color to a lighter gray
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7F, 0.7F, 0.7F, 1.0F)); // Light gray for timestamp
 
-    ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() - Config::Timing::TIMESTAMP_OFFSET_Y); // Align timestamp at the bottom
+    ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() - (bubblePadding - Config::Timing::TIMESTAMP_OFFSET_Y)); // Align timestamp at the bottom
     ImGui::SetCursorPosX(bubblePadding); // Align timestamp to the left
     ImGui::TextWrapped("%s", msg.getTimestamp().c_str());
 
@@ -347,10 +347,15 @@ void renderTimestamp(const Message& msg, float bubblePadding) {
  */
 void renderButtons(const Message &msg, int index, float bubbleWidth, float bubblePadding)
 {
+    ImVec2 textSize = ImGui::CalcTextSize(msg.getContent().c_str(), nullptr, true, bubbleWidth - bubblePadding * 2);
+
+    // Set Y position relative to text size and padding
+    float buttonPosY = textSize.y + bubblePadding; // Adjust Y based on text height and padding
+
     if (msg.isUserMessage())
     {
-        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() - Config::Timing::TIMESTAMP_OFFSET_Y); // Align button at the bottom
-        ImGui::SetCursorPosX(bubbleWidth - bubblePadding - Config::Button::WIDTH);                                                   // Align to right inside bubble
+        ImGui::SetCursorPosY(buttonPosY); // Set the button below the message content
+        ImGui::SetCursorPosX(bubbleWidth - bubblePadding - Config::Button::WIDTH); // Align to the right inside the bubble
 
         if (ImGui::Button("Copy", ImVec2(Config::Button::WIDTH, 0)))
         {
@@ -360,16 +365,15 @@ void renderButtons(const Message &msg, int index, float bubbleWidth, float bubbl
     }
     else
     {
-        float spacing = Config::Button::SPACING;
-        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() - Config::Timing::TIMESTAMP_OFFSET_Y); // Align buttons at the bottom
-        ImGui::SetCursorPosX(bubbleWidth - bubblePadding - (2 * Config::Button::WIDTH + spacing));                                   // Align to right inside bubble
+        ImGui::SetCursorPosY(buttonPosY); // Set Y position relative to message content
+        ImGui::SetCursorPosX(bubbleWidth - bubblePadding - (2 * Config::Button::WIDTH + Config::Button::SPACING)); // Align to the right inside the bubble
 
         if (ImGui::Button("Like", ImVec2(Config::Button::WIDTH, 0)))
         {
             std::cout << "Like button clicked for message index " << index << std::endl;
         }
 
-        ImGui::SameLine(0.0F, spacing);
+        ImGui::SameLine(0.0F, Config::Button::SPACING);
 
         if (ImGui::Button("Dislike", ImVec2(Config::Button::WIDTH, 0)))
         {
