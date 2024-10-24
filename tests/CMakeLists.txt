@@ -13,6 +13,7 @@ add_executable(kolosal_test kolosal_test.cpp)
 # Link the necessary libraries: GoogleTest and kolosal_lib
 target_link_libraries(kolosal_test
     gtest_main
+    gmock_main
     kolosal_lib  # Link against the Kolosal library
 )
 

@@ -5,6 +5,8 @@
 #include <vector>
 #include <chrono>
 #include <tuple>
+#include <stack>
+#include <regex>
 #include <array>
 #include "imgui.h"
 
@@ -12,50 +14,59 @@
 // [SECTION] Constants and Configurations
 //-----------------------------------------------------------------------------
 
-namespace Config {
+namespace Config
+{
     // Global constants for padding
     constexpr float FRAME_PADDING_X = 10.0F;
     constexpr float FRAME_PADDING_Y = 10.0F;
 
     // Constants to replace magic numbers
-    namespace Font {
+    namespace Font
+    {
         constexpr float DEFAULT_FONT_SIZE = 16.0F;
     }
 
-    namespace BackgroundColor {
+    namespace BackgroundColor
+    {
         constexpr float R = 0.1F;
         constexpr float G = 0.1F;
         constexpr float B = 0.1F;
         constexpr float A = 1.0F;
     }
 
-    namespace UserColor {
+    namespace UserColor
+    {
         constexpr float COMPONENT = 47.0F / 255.0F;
     }
 
-    namespace Bubble {
+    namespace Bubble
+    {
         constexpr float WIDTH_RATIO = 0.75F;
         constexpr float PADDING = 15.0F;
         constexpr float RIGHT_PADDING = 20.0F;
         constexpr float BOT_PADDING_X = 20.0F;
     }
 
-    namespace Timing {
+    namespace Timing
+    {
         constexpr float TIMESTAMP_OFFSET_Y = 5.0F;
     }
 
-    namespace Button {
+    namespace Button
+    {
         constexpr float WIDTH = 60.0F;
         constexpr float SPACING = 10.0F;
     }
 
-    namespace Style {
+    namespace Style
+    {
         constexpr float CHILD_ROUNDING = 10.0F;
         constexpr float FRAME_ROUNDING = 12.0F;
         constexpr float INPUT_FIELD_BG_COLOR = 0.15F;
     }
 
-    namespace InputField {
+    namespace InputField
+    {
         constexpr size_t TEXT_SIZE = 1024;
     }
 
@@ -64,6 +75,24 @@ namespace Config {
     constexpr float INPUT_HEIGHT = 100.0F;
     constexpr float CHAT_WINDOW_CONTENT_WIDTH = 750.0F;
 }
+
+//-----------------------------------------------------------------------------
+// [SECTION] Structs and Enums
+//-----------------------------------------------------------------------------
+
+/**
+ * @brief A struct to store the ImFont pointers for different markdown styles
+ * 
+ * The MarkdownFonts struct stores the ImFont pointers for different markdown styles,
+ * such as regular, bold, italic, bold italic, and code.
+ */
+struct MarkdownFonts {
+    ImFont* regular     = nullptr;
+    ImFont* bold        = nullptr;
+    ImFont* italic      = nullptr;
+    ImFont* boldItalic  = nullptr;
+    ImFont* code        = nullptr;
+};
 
 //-----------------------------------------------------------------------------
 // [SECTION] Forward Declarations and Global Variables
@@ -75,12 +104,21 @@ struct GLFWwindow;
 // Global chat bot instance
 extern class ChatBot chatBot;
 
+// Global markdown fonts
+extern MarkdownFonts g_mdFonts;
+
 //-----------------------------------------------------------------------------
 // [SECTION] Classes
 //-----------------------------------------------------------------------------
 
-// Message class with timestamp
-class Message {
+/**
+ * @brief A class to represent a chat message
+ *
+ * The Message class represents a chat message with the message content, a flag
+ * to indicate whether the message is from the user, and a timestamp.
+ */
+class Message
+{
 public:
     // Constructors
     Message(std::string content, bool isUser);
@@ -96,22 +134,35 @@ private:
     std::chrono::system_clock::time_point timestamp;
 };
 
-// Manages the history of chat messages
-class ChatHistory {
+/**
+ * @brief A class to store chat history
+ *
+ * The ChatHistory class stores a list of Message objects to represent the chat
+ * history. It provides a method to add a new message to the chat history.
+ * The chat history can be retrieved as a vector of Message objects.
+ */
+class ChatHistory
+{
 public:
-    void addMessage(const Message& message);
-    auto getMessages() const -> const std::vector<Message>&;
+    void addMessage(const Message &message);
+    auto getMessages() const -> const std::vector<Message> &;
 
 private:
     std::vector<Message> messages;
 };
 
-// Handles simple bot responses
-class ChatBot {
+/**
+ * @brief A simple chat bot that echoes user input
+ *
+ * The ChatBot class processes user input and generates a response by echoing
+ * the user's input. The chat history is stored in a ChatHistory object.
+ */
+class ChatBot
+{
 public:
     ChatBot() = default; // Use default constructor
-    void processUserInput(const std::string& input);
-    auto getChatHistory() const -> const ChatHistory&;
+    void processUserInput(const std::string &input);
+    auto getChatHistory() const -> const ChatHistory &;
 
 private:
     ChatHistory chatHistory;
@@ -123,24 +174,24 @@ private:
 
 // Initialization and Cleanup Functions
 auto initializeGLFW() -> bool;
-auto createWindow() -> GLFWwindow*;
+auto createWindow() -> GLFWwindow *;
 auto initializeGLAD() -> bool;
-void setupImGui(GLFWwindow* window);
-void mainLoop(GLFWwindow* window);
-void cleanup(GLFWwindow* window);
+void setupImGui(GLFWwindow *window);
+void mainLoop(GLFWwindow *window);
+void cleanup(GLFWwindow *window);
 
 // Rendering Functions
-void renderChatWindow(bool& focusInputField, float inputHeight);
-void renderChatHistory(const ChatHistory& chatHistory, float contentWidth);
-void renderMessage(const Message& msg, int index, float contentWidth);
-void pushIDAndColors(const Message& msg, int index);
-auto calculateDimensions(const Message& msg, float windowWidth) -> std::tuple<float, float, float>;
-void renderMessageContent(const Message& msg, float bubbleWidth, float bubblePadding);
-void renderTimestamp(const Message& msg, float bubblePadding);
-void renderButtons(const Message& msg, int index, float bubbleWidth, float bubblePadding);
-void renderInputField(bool& focusInputField, float inputHeight, float inputWidth);
+void renderChatWindow(bool &focusInputField, float inputHeight);
+void renderChatHistory(const ChatHistory &chatHistory, float contentWidth);
+void renderMessage(const Message &msg, int index, float contentWidth);
+void pushIDAndColors(const Message &msg, int index);
+auto calculateDimensions(const Message &msg, float windowWidth) -> std::tuple<float, float, float>;
+void renderMessageContent(const Message &msg, float bubbleWidth, float bubblePadding);
+void renderTimestamp(const Message &msg, float bubblePadding);
+void renderButtons(const Message &msg, int index, float bubbleWidth, float bubblePadding);
+void renderInputField(bool &focusInputField, float inputHeight, float inputWidth);
 void setInputFieldStyle();
 void restoreInputFieldStyle();
-void handleInputSubmission(char* inputText, bool& focusInputField);
+void handleInputSubmission(char *inputText, bool &focusInputField);
 
 #endif // KOLASAL_H

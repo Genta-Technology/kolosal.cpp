@@ -6,8 +6,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Enable compile_commands.json generation
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Removed Clang-Tidy configurations
-
 # Rest of your CMakeLists.txt remains the same...
 # Set OpenGL preference
 set(OpenGL_GL_PREFERENCE GLVND)
@@ -71,9 +69,20 @@ target_compile_definitions(kolosal_lib PUBLIC
     IMGUI_IMPL_OPENGL_LOADER_GLAD
 )
 
-# Define the font path relative to the executable
+# Define the font paths relative to the executable
+set(FONT_FILE_INTER_REGULAR "${CMAKE_SOURCE_DIR}/external/fonts/Inter-Regular.ttf")
+set(FONT_FILE_FIRACODE_REGULAR "${CMAKE_SOURCE_DIR}/external/fonts/FiraCode-Regular.ttf")
+set(FONT_FILE_INTER_BOLD "${CMAKE_SOURCE_DIR}/external/fonts/Inter-Bold.ttf")
+set(FONT_FILE_INTER_BOLDITALIC "${CMAKE_SOURCE_DIR}/external/fonts/Inter-BoldItalic.ttf")
+set(FONT_FILE_INTER_ITALIC "${CMAKE_SOURCE_DIR}/external/fonts/Inter-Italic.ttf")
+
+# Add compile definitions for each font
 target_compile_definitions(kolosal_lib PUBLIC
-    IMGUI_FONT_PATH="Inter-Regular.ttf"
+    IMGUI_FONT_PATH_INTER_REGULAR="Inter-Regular.ttf"
+    IMGUI_FONT_PATH_FIRACODE_REGULAR="FiraCode-Regular.ttf"
+    IMGUI_FONT_PATH_INTER_BOLD="Inter-Bold.ttf"
+    IMGUI_FONT_PATH_INTER_BOLDITALIC="Inter-BoldItalic.ttf"
+    IMGUI_FONT_PATH_INTER_ITALIC="Inter-Italic.ttf"
 )
 
 # Create the main executable
@@ -87,17 +96,22 @@ target_include_directories(KolosalDesktop PRIVATE
     external/glad/include
 )
 
-# Link the Kolosal library to the main executable
+# Link the Kolosal library and MD4C to the main executable
 target_link_libraries(KolosalDesktop PRIVATE kolosal_lib)
 
-# Path to the font file
-set(FONT_FILE "${CMAKE_SOURCE_DIR}/external/fonts/Inter-Regular.ttf")
-
-# Add custom command to copy the font to the build directory
+# Add custom commands to copy the fonts to the build directory
 add_custom_command(
     TARGET KolosalDesktop POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${FONT_FILE}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-Regular.ttf"
+    "${FONT_FILE_INTER_REGULAR}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-Regular.ttf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${FONT_FILE_FIRACODE_REGULAR}" "$<TARGET_FILE_DIR:KolosalDesktop>/FiraCode-Regular.ttf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${FONT_FILE_INTER_BOLD}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-Bold.ttf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${FONT_FILE_INTER_BOLDITALIC}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-BoldItalic.ttf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${FONT_FILE_INTER_ITALIC}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-Italic.ttf"
 )
 
 # Add GoogleTest

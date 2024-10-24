@@ -2,6 +2,14 @@
 #include <chrono>
 #include "kolosal.h"
 
+//-----------------------------------------------------------------------------
+// [SECTION] Test Cases
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Message Class Tests
+//-----------------------------------------------------------------------------
+
 // Test case for Message class constructor and content retrieval
 TEST(MessageTest, ConstructorAndGetContent) {
     Message msg("Hello, World!", true);
@@ -50,6 +58,10 @@ TEST(ChatBotTest, ProcessUserInput) {
     EXPECT_EQ(messages[1].getContent(), "Bot: Hi!");  // Bot response
 }
 
+//-----------------------------------------------------------------------------
+// [SECTION] ImGui Functions Tests
+//-----------------------------------------------------------------------------
+
 // Test case for GLFW initialization
 TEST(GLFWTest, InitializeGLFWSuccess) {
     // Assume glfwInit is mocked to return true for testing
@@ -77,6 +89,10 @@ TEST(ImGuiTest, SetupImGui) {
     setupImGui(mockWindow);
     // You can further test specific ImGui settings if necessary
 }
+
+//-----------------------------------------------------------------------------
+// [SECTION] Main Function
+//-----------------------------------------------------------------------------
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);

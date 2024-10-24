@@ -28,6 +28,9 @@ namespace Config
 // Define global instance of ChatBot
 ChatBot chatBot;
 
+// Define global instance of MarkdownFonts
+MarkdownFonts g_mdFonts;
+
 //-----------------------------------------------------------------------------
 // [SECTION] Message Class Implementations
 //-----------------------------------------------------------------------------
@@ -131,6 +134,12 @@ auto ChatBot::getChatHistory() const -> const ChatHistory &
 }
 
 //-----------------------------------------------------------------------------
+// [SECTION] MarkdownRenderer Function Implementations
+//-----------------------------------------------------------------------------
+
+
+
+//-----------------------------------------------------------------------------
 // [SECTION] GLFW and OpenGL Initialization Functions
 //-----------------------------------------------------------------------------
 
@@ -195,6 +204,29 @@ auto initializeGLAD() -> bool
 //-----------------------------------------------------------------------------
 
 /**
+ * @brief Loads a font from a file and adds it to the ImGui context.
+ * @param imguiIO The ImGuiIO object containing the font data.
+ * @param fontPath The path to the font file.
+ * @param fallbackFont The fallback font to use if loading fails.
+ * @param fontSize The size of the font.
+ * @return The loaded font, or the fallback font if loading fails.
+ * @note If loading fails, an error message is printed to the standard error stream.
+ * @note The fallback font is used if the loaded font is nullptr.
+ *
+ * This function loads a font from a file and adds it to the ImGui context.
+ */
+ImFont *LoadFont(ImGuiIO &imguiIO, const char *fontPath, ImFont *fallbackFont, float fontSize)
+{
+    ImFont *font = imguiIO.Fonts->AddFontFromFileTTF(fontPath, fontSize);
+    if (font == nullptr)
+    {
+        std::cerr << "Failed to load font: " << fontPath << std::endl;
+        return fallbackFont;
+    }
+    return font;
+}
+
+/**
  * @brief Sets up the ImGui context and initializes the platform/renderer backends.
  *
  * @param window A pointer to the GLFW window.
@@ -204,15 +236,16 @@ void setupImGui(GLFWwindow *window)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &imguiIO = ImGui::GetIO();
-    ImFont *interFont = imguiIO.Fonts->AddFontFromFileTTF(IMGUI_FONT_PATH, Config::Font::DEFAULT_FONT_SIZE);
-    if (interFont == nullptr)
-    {
-        std::cerr << "Failed to load font: " << IMGUI_FONT_PATH << std::endl;
-    }
-    else
-    {
-        imguiIO.FontDefault = interFont;
-    }
+
+    // Set up the ImGui style
+    g_mdFonts.regular = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_REGULAR, imguiIO.Fonts->AddFontDefault(), Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.bold = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLD, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.italic = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_ITALIC, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.boldItalic = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLDITALIC, g_mdFonts.bold, Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.code = LoadFont(imguiIO, IMGUI_FONT_PATH_FIRACODE_REGULAR, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
+
+    imguiIO.FontDefault = g_mdFonts.regular;
+
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
@@ -326,15 +359,16 @@ void renderMessageContent(const Message &msg, float bubbleWidth, float bubblePad
  * @param msg The message object containing the timestamp to render.
  * @param bubblePadding The padding to apply on the left side of the timestamp.
  */
-void renderTimestamp(const Message& msg, float bubblePadding) {
+void renderTimestamp(const Message &msg, float bubblePadding)
+{
     // Set timestamp color to a lighter gray
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7F, 0.7F, 0.7F, 1.0F)); // Light gray for timestamp
 
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() - (bubblePadding - Config::Timing::TIMESTAMP_OFFSET_Y)); // Align timestamp at the bottom
-    ImGui::SetCursorPosX(bubblePadding); // Align timestamp to the left
+    ImGui::SetCursorPosX(bubblePadding);                                                                                                           // Align timestamp to the left
     ImGui::TextWrapped("%s", msg.getTimestamp().c_str());
 
-    ImGui::PopStyleColor();  // Restore original text color
+    ImGui::PopStyleColor(); // Restore original text color
 }
 
 /**
@@ -354,7 +388,7 @@ void renderButtons(const Message &msg, int index, float bubbleWidth, float bubbl
 
     if (msg.isUserMessage())
     {
-        ImGui::SetCursorPosY(buttonPosY); // Set the button below the message content
+        ImGui::SetCursorPosY(buttonPosY);                                          // Set the button below the message content
         ImGui::SetCursorPosX(bubbleWidth - bubblePadding - Config::Button::WIDTH); // Align to the right inside the bubble
 
         if (ImGui::Button("Copy", ImVec2(Config::Button::WIDTH, 0)))
@@ -365,7 +399,7 @@ void renderButtons(const Message &msg, int index, float bubbleWidth, float bubbl
     }
     else
     {
-        ImGui::SetCursorPosY(buttonPosY); // Set Y position relative to message content
+        ImGui::SetCursorPosY(buttonPosY);                                                                          // Set Y position relative to message content
         ImGui::SetCursorPosX(bubbleWidth - bubblePadding - (2 * Config::Button::WIDTH + Config::Button::SPACING)); // Align to the right inside the bubble
 
         if (ImGui::Button("Like", ImVec2(Config::Button::WIDTH, 0)))
@@ -582,24 +616,27 @@ void handleInputSubmission(char *inputText, bool &focusInputField)
  * @param focusInputField A reference to the focus input field flag.
  * @param inputHeight The height of the input field.
  */
-void renderInputField(bool& focusInputField, float inputHeight, float inputWidth) {
+void renderInputField(bool &focusInputField, float inputHeight, float inputWidth)
+{
     setInputFieldStyle();
 
     static std::array<char, Config::InputField::TEXT_SIZE> inputText = {0};
 
-    if (focusInputField) {
+    if (focusInputField)
+    {
         ImGui::SetKeyboardFocusHere();
         focusInputField = false;
     }
 
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue |
-                               ImGuiInputTextFlags_CtrlEnterForNewLine;
+                                ImGuiInputTextFlags_CtrlEnterForNewLine;
 
     float availableWidth = ImGui::GetContentRegionAvail().x;
     float actualInputWidth = (inputWidth < availableWidth) ? inputWidth : availableWidth;
     float paddingX = (availableWidth - actualInputWidth) / Config::HALF_DIVISOR;
 
-    if (paddingX > 0.0F) {
+    if (paddingX > 0.0F)
+    {
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
     }
 
@@ -609,25 +646,31 @@ void renderInputField(bool& focusInputField, float inputHeight, float inputWidth
     // Begin a group to keep the draw calls together
     ImGui::BeginGroup();
 
-    if (ImGui::InputTextMultiline("##input", inputText.data(), inputText.size(), inputSize, flags)) {
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inputWidth - 15);
+
+    if (ImGui::InputTextMultiline("##input", inputText.data(), inputText.size(), inputSize, flags))
+    {
         handleInputSubmission(inputText.data(), focusInputField);
     }
+
+    ImGui::PopTextWrapPos();
 
     // If the input field is empty and not focused, draw the placeholder text
     bool isEmpty = (strlen(inputText.data()) == 0);
 
-    if (isEmpty) {
+    if (isEmpty)
+    {
         // Get the context and window information
-        ImGuiContext& g = *ImGui::GetCurrentContext();
-        ImGuiWindow* window = g.CurrentWindow;
-        
+        ImGuiContext &g = *ImGui::GetCurrentContext();
+        ImGuiWindow *window = g.CurrentWindow;
+
         // Use the foreground draw list for the window
-        ImDrawList* drawList = ImGui::GetForegroundDrawList(window);
+        ImDrawList *drawList = ImGui::GetForegroundDrawList(window);
 
         // Get the position and size of the input field
         ImVec2 inputFieldPos = ImGui::GetItemRectMin();
 
-        const ImGuiStyle& style = ImGui::GetStyle();
+        const ImGuiStyle &style = ImGui::GetStyle();
         ImVec2 textPos = inputFieldPos;
         textPos.x += style.FramePadding.x;
         textPos.y += style.FramePadding.y;
@@ -639,8 +682,7 @@ void renderInputField(bool& focusInputField, float inputHeight, float inputWidth
         drawList->AddText(
             textPos,
             placeholderColor,
-            "Type a message and press Enter to send (Ctrl+Enter for new line)"
-        );
+            "Type a message and press Enter to send (Ctrl+Enter for new line)");
     }
 
     ImGui::EndGroup();
