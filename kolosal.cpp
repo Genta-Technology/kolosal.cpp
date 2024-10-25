@@ -28,6 +28,12 @@ namespace Config
 // Define global instance of ChatBot
 ChatBot chatBot;
 
+// Define global instance of MarkdownFonts
+MarkdownFonts g_mdFonts;
+
+// Define global instance of IconFonts
+IconFonts g_iconFonts;
+
 //-----------------------------------------------------------------------------
 // [SECTION] Message Class Implementations
 //-----------------------------------------------------------------------------
@@ -131,6 +137,10 @@ auto ChatBot::getChatHistory() const -> const ChatHistory &
 }
 
 //-----------------------------------------------------------------------------
+// [SECTION] MarkdownRenderer Function Implementations
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
 // [SECTION] GLFW and OpenGL Initialization Functions
 //-----------------------------------------------------------------------------
 
@@ -195,6 +205,64 @@ auto initializeGLAD() -> bool
 //-----------------------------------------------------------------------------
 
 /**
+ * @brief Loads a font from a file and adds it to the ImGui context.
+ * @param imguiIO The ImGuiIO object containing the font data.
+ * @param fontPath The path to the font file.
+ * @param fallbackFont The fallback font to use if loading fails.
+ * @param fontSize The size of the font.
+ * @return The loaded font, or the fallback font if loading fails.
+ * @note If loading fails, an error message is printed to the standard error stream.
+ * @note The fallback font is used if the loaded font is nullptr.
+ *
+ * This function loads a font from a file and adds it to the ImGui context.
+ */
+auto LoadFont(ImGuiIO &imguiIO, const char *fontPath, ImFont *fallbackFont, float fontSize) -> ImFont *
+{
+    ImFont *font = imguiIO.Fonts->AddFontFromFileTTF(fontPath, fontSize);
+    if (font == nullptr)
+    {
+        std::cerr << "Failed to load font: " << fontPath << std::endl;
+        return fallbackFont;
+    }
+    return font;
+}
+
+/**
+ * @brief Loads an icon font from a file and adds it to the ImGui context.
+ * @param io The ImGuiIO object containing the font data.
+ * @param iconFontPath The path to the icon font file.
+ * @param fontSize The size of the font.
+ * @return The loaded icon font, or the regular font if loading fails.
+ * @note If loading fails, an error message is printed to the standard error stream.
+ *
+ * This function loads an icon font from a file and adds it to the ImGui context.
+ */
+auto LoadIconFont(ImGuiIO &io, const char *iconFontPath, float fontSize) -> ImFont *
+{
+    static const ImWchar icons_ranges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
+    ImFontConfig icons_config;
+    icons_config.MergeMode = true;            // Enable merging
+    icons_config.PixelSnapH = true;           // Enable pixel snapping
+    icons_config.GlyphMinAdvanceX = fontSize; // Use fontSize as min advance x
+
+    // First load the regular font if not already loaded
+    if (!g_mdFonts.regular)
+    {
+        g_mdFonts.regular = LoadFont(io, IMGUI_FONT_PATH_INTER_REGULAR, io.Fonts->AddFontDefault(), fontSize);
+    }
+
+    // Load and merge icon font
+    ImFont *iconFont = io.Fonts->AddFontFromFileTTF(iconFontPath, fontSize, &icons_config, icons_ranges);
+    if (iconFont == nullptr)
+    {
+        std::cerr << "Failed to load icon font: " << iconFontPath << std::endl;
+        return g_mdFonts.regular;
+    }
+
+    return iconFont;
+}
+
+/**
  * @brief Sets up the ImGui context and initializes the platform/renderer backends.
  *
  * @param window A pointer to the GLFW window.
@@ -204,15 +272,20 @@ void setupImGui(GLFWwindow *window)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &imguiIO = ImGui::GetIO();
-    ImFont *interFont = imguiIO.Fonts->AddFontFromFileTTF(IMGUI_FONT_PATH, Config::Font::DEFAULT_FONT_SIZE);
-    if (interFont == nullptr)
-    {
-        std::cerr << "Failed to load font: " << IMGUI_FONT_PATH << std::endl;
-    }
-    else
-    {
-        imguiIO.FontDefault = interFont;
-    }
+
+    // Set up the ImGui style
+    g_mdFonts.regular = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_REGULAR, imguiIO.Fonts->AddFontDefault(), Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.bold = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLD, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.italic = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_ITALIC, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.boldItalic = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLDITALIC, g_mdFonts.bold, Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.code = LoadFont(imguiIO, IMGUI_FONT_PATH_FIRACODE_REGULAR, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
+
+    // Load icon fonts
+    g_iconFonts.regular = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_REGULAR, Config::Icon::DEFAULT_FONT_SIZE);
+    g_iconFonts.brands = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_BRANDS, Config::Icon::DEFAULT_FONT_SIZE);
+
+    imguiIO.FontDefault = g_mdFonts.regular;
+
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
@@ -234,7 +307,7 @@ void mainLoop(GLFWwindow *window)
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        renderChatWindow(focusInputField, inputHeight);
+        ChatWindow::renderChatWindow(focusInputField, inputHeight);
         ImGui::Render();
         int display_w;
         int display_h;
@@ -262,7 +335,99 @@ void cleanup(GLFWwindow *window)
 }
 
 //-----------------------------------------------------------------------------
-// [SECTION] Rendering Functions
+// [SECTION] Custom UI Functions
+//-----------------------------------------------------------------------------
+
+/**
+ * @brief Renders a single button with the specified configuration.
+ *
+ * @param config The configuration for the button.
+ */
+void renderSingleButton(const ButtonConfig &config)
+{
+    std::string buttonText;
+    bool hasIcon = !config.icon.empty();
+    bool hasLabel = config.label.has_value();
+
+    // Set the border radius (rounding) for the button
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Config::Button::RADIUS);
+
+    if (hasIcon)
+    {
+        // Push icon font for icon rendering
+        ImGui::PushFont(g_iconFonts.regular);
+    }
+
+    if (hasIcon && hasLabel)
+    {
+        buttonText = config.icon;
+        if (ImGui::Button(buttonText.c_str(), ImVec2(config.size.x / 4, config.size.y)))
+        {
+            if (config.onClick)
+                config.onClick();
+        }
+
+        ImGui::PopFont(); // Pop icon font
+        ImGui::SameLine(0, config.padding);
+
+        // Use regular font for label
+        buttonText = config.label.value();
+        if (ImGui::Button(buttonText.c_str(), ImVec2(3 * config.size.x / 4, config.size.y)))
+        {
+            if (config.onClick)
+                config.onClick();
+        }
+    }
+    else if (hasIcon)
+    {
+        buttonText = config.icon;
+        if (ImGui::Button(buttonText.c_str(), config.size))
+        {
+            if (config.onClick)
+                config.onClick();
+        }
+        ImGui::PopFont(); // Pop icon font
+    }
+    else if (hasLabel)
+    {
+        buttonText = config.label.value();
+        if (ImGui::Button(buttonText.c_str(), config.size))
+        {
+            if (config.onClick)
+                config.onClick();
+        }
+    }
+
+    // Pop the border radius style
+    ImGui::PopStyleVar();
+}
+
+/**
+ * @brief Renders a group of buttons with the specified configurations.
+ *
+ * @param buttons The configurations for the buttons.
+ * @param startX The X-coordinate to start rendering the buttons.
+ * @param startY The Y-coordinate to start rendering the buttons.
+ * @param spacing The spacing between buttons.
+ */
+void renderButtonGroup(const std::vector<ButtonConfig> &buttons, float startX, float startY, float spacing)
+{
+    ImGui::SetCursorPosX(startX);
+    ImGui::SetCursorPosY(startY);
+
+    for (size_t i = 0; i < buttons.size(); ++i)
+    {
+        renderSingleButton(buttons[i]);
+
+        if (i < buttons.size() - 1)
+        {
+            ImGui::SameLine(0.0f, spacing);
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
+// [SECTION] Chat Window Rendering Functions
 //-----------------------------------------------------------------------------
 
 /**
@@ -271,7 +436,7 @@ void cleanup(GLFWwindow *window)
  * @param msg The message object containing information about the message.
  * @param index The index used to set the ImGui ID.
  */
-void pushIDAndColors(const Message &msg, int index)
+void ChatWindow::MessageBubble::pushIDAndColors(const Message &msg, int index)
 {
     ImGui::PushID(index);
 
@@ -293,7 +458,7 @@ void pushIDAndColors(const Message &msg, int index)
  *         - bubblePadding: The padding inside the message bubble.
  *         - paddingX: The horizontal padding to align the bubble.
  */
-auto calculateDimensions(const Message &msg, float windowWidth) -> std::tuple<float, float, float>
+auto ChatWindow::MessageBubble::calculateDimensions(const Message &msg, float windowWidth) -> std::tuple<float, float, float>
 {
     float bubbleWidth = windowWidth * Config::Bubble::WIDTH_RATIO; // 75% width for both user and bot
     float bubblePadding = Config::Bubble::PADDING;                 // Padding inside the bubble
@@ -311,7 +476,7 @@ auto calculateDimensions(const Message &msg, float windowWidth) -> std::tuple<fl
  * @param bubbleWidth The width of the message bubble.
  * @param bubblePadding The padding inside the message bubble.
  */
-void renderMessageContent(const Message &msg, float bubbleWidth, float bubblePadding)
+void ChatWindow::MessageBubble::renderMessageContent(const Message &msg, float bubbleWidth, float bubblePadding)
 {
     ImGui::SetCursorPosX(bubblePadding);
     ImGui::SetCursorPosY(bubblePadding);
@@ -326,15 +491,16 @@ void renderMessageContent(const Message &msg, float bubbleWidth, float bubblePad
  * @param msg The message object containing the timestamp to render.
  * @param bubblePadding The padding to apply on the left side of the timestamp.
  */
-void renderTimestamp(const Message& msg, float bubblePadding) {
+void ChatWindow::MessageBubble::renderTimestamp(const Message &msg, float bubblePadding)
+{
     // Set timestamp color to a lighter gray
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7F, 0.7F, 0.7F, 1.0F)); // Light gray for timestamp
 
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() - (bubblePadding - Config::Timing::TIMESTAMP_OFFSET_Y)); // Align timestamp at the bottom
-    ImGui::SetCursorPosX(bubblePadding); // Align timestamp to the left
+    ImGui::SetCursorPosX(bubblePadding);                                                                                                           // Align timestamp to the left
     ImGui::TextWrapped("%s", msg.getTimestamp().c_str());
 
-    ImGui::PopStyleColor();  // Restore original text color
+    ImGui::PopStyleColor(); // Restore original text color
 }
 
 /**
@@ -345,40 +511,59 @@ void renderTimestamp(const Message& msg, float bubblePadding) {
  * @param bubbleWidth The width of the message bubble.
  * @param bubblePadding The padding inside the message bubble.
  */
-void renderButtons(const Message &msg, int index, float bubbleWidth, float bubblePadding)
+void ChatWindow::MessageBubble::renderButtons(const Message &msg, int index, float bubbleWidth, float bubblePadding)
 {
     ImVec2 textSize = ImGui::CalcTextSize(msg.getContent().c_str(), nullptr, true, bubbleWidth - bubblePadding * 2);
-
-    // Set Y position relative to text size and padding
-    float buttonPosY = textSize.y + bubblePadding; // Adjust Y based on text height and padding
+    float buttonPosY = textSize.y + bubblePadding;
 
     if (msg.isUserMessage())
     {
-        ImGui::SetCursorPosY(buttonPosY); // Set the button below the message content
-        ImGui::SetCursorPosX(bubbleWidth - bubblePadding - Config::Button::WIDTH); // Align to the right inside the bubble
+        ButtonConfig copyButtonConfig{
+            .label = std::nullopt,
+            .icon = ICON_FA_COPY,
+            .size = ImVec2(Config::Button::WIDTH, 0),
+            .padding = Config::Button::SPACING,
+            .onClick = [&msg]()
+            {
+                ImGui::SetClipboardText(msg.getContent().c_str());
+                std::cout << "Copied message content to clipboard" << std::endl;
+            }};
 
-        if (ImGui::Button("Copy", ImVec2(Config::Button::WIDTH, 0)))
-        {
-            ImGui::SetClipboardText(msg.getContent().c_str()); // Copy message content to clipboard
-            std::cout << "Copy button clicked for message index " << index << std::endl;
-        }
+        std::vector<ButtonConfig> userButtons = {copyButtonConfig};
+
+        renderButtonGroup(
+            userButtons,
+            bubbleWidth - bubblePadding - Config::Button::WIDTH,
+            buttonPosY);
     }
     else
     {
-        ImGui::SetCursorPosY(buttonPosY); // Set Y position relative to message content
-        ImGui::SetCursorPosX(bubbleWidth - bubblePadding - (2 * Config::Button::WIDTH + Config::Button::SPACING)); // Align to the right inside the bubble
+        ButtonConfig likeButtonConfig{
+            .label = std::nullopt,
+            .icon = ICON_FA_THUMBS_UP,
+            .size = ImVec2(Config::Button::WIDTH, 0),
+            .padding = Config::Button::SPACING,
+            .onClick = [index]()
+            {
+                std::cout << "Like button clicked for message " << index << std::endl;
+            }};
 
-        if (ImGui::Button("Like", ImVec2(Config::Button::WIDTH, 0)))
-        {
-            std::cout << "Like button clicked for message index " << index << std::endl;
-        }
+        ButtonConfig dislikeButtonConfig{
+            .label = std::nullopt,
+            .icon = ICON_FA_THUMBS_DOWN,
+            .size = ImVec2(Config::Button::WIDTH, 0),
+            .padding = Config::Button::SPACING,
+            .onClick = [index]()
+            {
+                std::cout << "Dislike button clicked for message " << index << std::endl;
+            }};
 
-        ImGui::SameLine(0.0F, Config::Button::SPACING);
+        std::vector<ButtonConfig> assistantButtons = { likeButtonConfig, dislikeButtonConfig };
 
-        if (ImGui::Button("Dislike", ImVec2(Config::Button::WIDTH, 0)))
-        {
-            std::cout << "Dislike button clicked for message index " << index << std::endl;
-        }
+        renderButtonGroup(
+            assistantButtons,
+            bubbleWidth - bubblePadding - (2 * Config::Button::WIDTH + Config::Button::SPACING),
+            buttonPosY);
     }
 }
 
@@ -388,13 +573,13 @@ void renderButtons(const Message &msg, int index, float bubbleWidth, float bubbl
  * @param msg The message object to be rendered.
  * @param index The index of the message in the list.
  */
-void renderMessage(const Message &msg, int index, float contentWidth)
+void ChatWindow::MessageBubble::renderMessage(const Message &msg, int index, float contentWidth)
 {
-    pushIDAndColors(msg, index);
+    ChatWindow::MessageBubble::pushIDAndColors(msg, index);
 
     float windowWidth = contentWidth; // Use contentWidth instead of ImGui::GetWindowContentRegionMax().x
 
-    auto [bubbleWidth, bubblePadding, paddingX] = calculateDimensions(msg, windowWidth);
+    auto [bubbleWidth, bubblePadding, paddingX] = ChatWindow::MessageBubble::calculateDimensions(msg, windowWidth);
 
     ImVec2 textSize = ImGui::CalcTextSize(msg.getContent().c_str(), nullptr, true, bubbleWidth - bubblePadding * 2);
     float estimatedHeight = textSize.y + bubblePadding * 2 + ImGui::GetTextLineHeightWithSpacing(); // Add padding and spacing for buttons
@@ -416,9 +601,9 @@ void renderMessage(const Message &msg, int index, float contentWidth)
         ImGuiWindowFlags_NoScrollbar // Supported flag
     );
 
-    renderMessageContent(msg, bubbleWidth, bubblePadding);
-    renderTimestamp(msg, bubblePadding);
-    renderButtons(msg, index, bubbleWidth, bubblePadding);
+    ChatWindow::MessageBubble::renderMessageContent(msg, bubbleWidth, bubblePadding);
+    ChatWindow::MessageBubble::renderTimestamp(msg, bubblePadding);
+    ChatWindow::MessageBubble::renderButtons(msg, index, bubbleWidth, bubblePadding);
 
     ImGui::EndChild();
     ImGui::EndGroup();
@@ -438,7 +623,7 @@ void renderMessage(const Message &msg, int index, float contentWidth)
  *
  * @param chatHistory The chat history object containing the messages to be displayed.
  */
-void renderChatHistory(const ChatHistory &chatHistory, float contentWidth)
+void ChatWindow::renderChatHistory(const ChatHistory &chatHistory, float contentWidth)
 {
     static size_t lastMessageCount = 0;
     size_t currentMessageCount = chatHistory.getMessages().size();
@@ -455,7 +640,7 @@ void renderChatHistory(const ChatHistory &chatHistory, float contentWidth)
     const auto &messages = chatHistory.getMessages();
     for (size_t i = 0; i < messages.size(); ++i)
     {
-        renderMessage(messages[i], static_cast<int>(i), contentWidth);
+        ChatWindow::MessageBubble::renderMessage(messages[i], static_cast<int>(i), contentWidth);
     }
 
     // If the user was at the bottom and new messages were added, scroll to bottom
@@ -474,7 +659,7 @@ void renderChatHistory(const ChatHistory &chatHistory, float contentWidth)
  * @param focusInputField A boolean reference to control the focus state of the input field.
  * @param inputHeight The height of the input field.
  */
-void renderChatWindow(bool &focusInputField, float inputHeight)
+void ChatWindow::renderChatWindow(bool &focusInputField, float inputHeight)
 {
     ImGuiIO &imguiIO = ImGui::GetIO();
 
@@ -520,12 +705,12 @@ void renderChatWindow(bool &focusInputField, float inputHeight)
     ImGui::BeginChild("ScrollingRegion", ImVec2(0, scrollingRegionHeight), false, ImGuiWindowFlags_NoScrollbar);
 
     // Render chat history
-    renderChatHistory(chatBot.getChatHistory(), contentWidth);
+    ChatWindow::renderChatHistory(chatBot.getChatHistory(), contentWidth);
 
     ImGui::EndChild();
 
     // Render the input field at the bottom
-    renderInputField(focusInputField, inputHeight, contentWidth);
+    ChatWindow::InputField::renderInputField(focusInputField, inputHeight, contentWidth);
 
     ImGui::EndChild(); // End of ContentRegion child window
 
@@ -539,7 +724,7 @@ void renderChatWindow(bool &focusInputField, float inputHeight)
 /**
  * @brief Sets the custom style for the input field.
  */
-void setInputFieldStyle()
+void ChatWindow::InputField::setInputFieldStyle()
 {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Config::Style::FRAME_ROUNDING);                                                                                      // Rounded corners
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y));                                                            // Padding inside input field
@@ -549,7 +734,7 @@ void setInputFieldStyle()
 /**
  * @brief Restores the original style settings for the input field.
  */
-void restoreInputFieldStyle()
+void ChatWindow::InputField::restoreInputFieldStyle()
 {
     ImGui::PopStyleColor(1); // Restore FrameBg
     ImGui::PopStyleVar(2);   // Restore frame rounding and padding
@@ -561,7 +746,7 @@ void restoreInputFieldStyle()
  * @param inputText The input text buffer.
  * @param focusInputField A reference to the focus input field flag.
  */
-void handleInputSubmission(char *inputText, bool &focusInputField)
+void ChatWindow::InputField::handleInputSubmission(char *inputText, bool &focusInputField)
 {
     std::string inputStr(inputText);
     inputStr.erase(0, inputStr.find_first_not_of(" \n\r\t"));
@@ -582,12 +767,14 @@ void handleInputSubmission(char *inputText, bool &focusInputField)
  * @param focusInputField A reference to the focus input field flag.
  * @param inputHeight The height of the input field.
  */
-void renderInputField(bool& focusInputField, float inputHeight, float inputWidth) {
-    setInputFieldStyle();
+void ChatWindow::InputField::renderInputField(bool &focusInputField, float inputHeight, float inputWidth)
+{
+    ChatWindow::InputField::setInputFieldStyle();
 
     static std::array<char, Config::InputField::TEXT_SIZE> inputText = {0};
 
-    if (focusInputField) {
+    if (focusInputField)
+    {
         ImGui::SetKeyboardFocusHere();
         focusInputField = false;
     }
@@ -600,7 +787,8 @@ void renderInputField(bool& focusInputField, float inputHeight, float inputWidth
     float actualInputWidth = (inputWidth < availableWidth) ? inputWidth : availableWidth;
     float paddingX = (availableWidth - actualInputWidth) / Config::HALF_DIVISOR;
 
-    if (paddingX > 0.0F) {
+    if (paddingX > 0.0F)
+    {
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
     }
 
@@ -610,25 +798,31 @@ void renderInputField(bool& focusInputField, float inputHeight, float inputWidth
     // Begin a group to keep the draw calls together
     ImGui::BeginGroup();
 
-    if (ImGui::InputTextMultiline("##input", inputText.data(), inputText.size(), inputSize, flags)) {
-        handleInputSubmission(inputText.data(), focusInputField);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inputWidth - 15);
+
+    if (ImGui::InputTextMultiline("##input", inputText.data(), inputText.size(), inputSize, flags))
+    {
+        ChatWindow::InputField::handleInputSubmission(inputText.data(), focusInputField);
     }
+
+    ImGui::PopTextWrapPos();
 
     // If the input field is empty and not focused, draw the placeholder text
     bool isEmpty = (strlen(inputText.data()) == 0);
 
-    if (isEmpty) {
+    if (isEmpty)
+    {
         // Get the context and window information
-        ImGuiContext& g = *ImGui::GetCurrentContext();
-        ImGuiWindow* window = g.CurrentWindow;
-        
+        ImGuiContext &g = *ImGui::GetCurrentContext();
+        ImGuiWindow *window = g.CurrentWindow;
+
         // Use the foreground draw list for the window
-        ImDrawList* drawList = ImGui::GetForegroundDrawList(window);
+        ImDrawList *drawList = ImGui::GetForegroundDrawList(window);
 
         // Get the position and size of the input field
         ImVec2 inputFieldPos = ImGui::GetItemRectMin();
 
-        const ImGuiStyle& style = ImGui::GetStyle();
+        const ImGuiStyle &style = ImGui::GetStyle();
         ImVec2 textPos = inputFieldPos;
         textPos.x += style.FramePadding.x;
         textPos.y += style.FramePadding.y;
@@ -640,11 +834,10 @@ void renderInputField(bool& focusInputField, float inputHeight, float inputWidth
         drawList->AddText(
             textPos,
             placeholderColor,
-            "Type a message and press Enter to send (Ctrl+Enter for new line)"
-        );
+            "Type a message and press Enter to send (Ctrl+Enter for new line)");
     }
 
     ImGui::EndGroup();
 
-    restoreInputFieldStyle();
+    ChatWindow::InputField::restoreInputFieldStyle();
 }
