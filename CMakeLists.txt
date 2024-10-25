@@ -55,6 +55,7 @@ target_include_directories(kolosal_lib PUBLIC
     ${IMGUI_DIR}/backends
     ${OPENGL_INCLUDE_DIR}
     external/glad/include
+    external/icons
 )
 
 # Link libraries to Kolosal library
@@ -75,6 +76,8 @@ set(FONT_FILE_FIRACODE_REGULAR "${CMAKE_SOURCE_DIR}/external/fonts/FiraCode-Regu
 set(FONT_FILE_INTER_BOLD "${CMAKE_SOURCE_DIR}/external/fonts/Inter-Bold.ttf")
 set(FONT_FILE_INTER_BOLDITALIC "${CMAKE_SOURCE_DIR}/external/fonts/Inter-BoldItalic.ttf")
 set(FONT_FILE_INTER_ITALIC "${CMAKE_SOURCE_DIR}/external/fonts/Inter-Italic.ttf")
+set(FONT_FILE_FA_BRANDS "${CMAKE_SOURCE_DIR}/external/fonts/fa-brands-400.ttf")
+set(FONT_FILE_FA_REGULAR "${CMAKE_SOURCE_DIR}/external/fonts/fa-regular-400.ttf")
 
 # Add compile definitions for each font
 target_compile_definitions(kolosal_lib PUBLIC
@@ -83,6 +86,8 @@ target_compile_definitions(kolosal_lib PUBLIC
     IMGUI_FONT_PATH_INTER_BOLD="Inter-Bold.ttf"
     IMGUI_FONT_PATH_INTER_BOLDITALIC="Inter-BoldItalic.ttf"
     IMGUI_FONT_PATH_INTER_ITALIC="Inter-Italic.ttf"
+    IMGUI_FONT_PATH_FA_BRANDS="fa-brands-400.ttf"
+    IMGUI_FONT_PATH_FA_REGULAR="fa-regular-400.ttf"
 )
 
 # Create the main executable
@@ -94,6 +99,7 @@ target_include_directories(KolosalDesktop PRIVATE
     ${IMGUI_DIR}/backends
     ${OPENGL_INCLUDE_DIR}
     external/glad/include
+    external/icons
 )
 
 # Link the Kolosal library and MD4C to the main executable
@@ -112,6 +118,10 @@ add_custom_command(
     "${FONT_FILE_INTER_BOLDITALIC}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-BoldItalic.ttf"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${FONT_FILE_INTER_ITALIC}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-Italic.ttf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${FONT_FILE_FA_BRANDS}" "$<TARGET_FILE_DIR:KolosalDesktop>/fa-brands-400.ttf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${FONT_FILE_FA_REGULAR}" "$<TARGET_FILE_DIR:KolosalDesktop>/fa-regular-400.ttf"
 )
 
 # Add GoogleTest

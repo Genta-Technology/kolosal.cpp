@@ -8,7 +8,10 @@
 #include <stack>
 #include <regex>
 #include <array>
+#include <optional>
 #include "imgui.h"
+#include "IconsFontAwesome5.h"
+#include "IconsFontAwesome5Brands.h"
 
 //-----------------------------------------------------------------------------
 // [SECTION] Constants and Configurations
@@ -24,6 +27,11 @@ namespace Config
     namespace Font
     {
         constexpr float DEFAULT_FONT_SIZE = 16.0F;
+    }
+
+    namespace Icon
+    {
+        constexpr float DEFAULT_FONT_SIZE = 10.0F;
     }
 
     namespace BackgroundColor
@@ -54,8 +62,9 @@ namespace Config
 
     namespace Button
     {
-        constexpr float WIDTH = 60.0F;
+        constexpr float WIDTH = 30.0F;
         constexpr float SPACING = 10.0F;
+        constexpr float RADIUS = 5.0F;
     }
 
     namespace Style
@@ -82,16 +91,44 @@ namespace Config
 
 /**
  * @brief A struct to store the ImFont pointers for different markdown styles
- * 
+ *
  * The MarkdownFonts struct stores the ImFont pointers for different markdown styles,
  * such as regular, bold, italic, bold italic, and code.
  */
-struct MarkdownFonts {
-    ImFont* regular     = nullptr;
-    ImFont* bold        = nullptr;
-    ImFont* italic      = nullptr;
-    ImFont* boldItalic  = nullptr;
-    ImFont* code        = nullptr;
+struct MarkdownFonts
+{
+    ImFont *regular = nullptr;
+    ImFont *bold = nullptr;
+    ImFont *italic = nullptr;
+    ImFont *boldItalic = nullptr;
+    ImFont *code = nullptr;
+};
+
+/**
+ * @brief A struct to store the ImFont pointers for different icon fonts
+ *
+ * The IconFonts struct stores the ImFont pointers for different icon fonts,
+ * such as regular and brands.
+ */
+struct IconFonts
+{
+    ImFont *regular = nullptr;
+    ImFont *brands = nullptr;
+};
+
+/**
+ * @brief A struct to store the configuration for a button
+ *
+ * The ButtonConfig struct stores the configuration for a button, including the label,
+ * icon, size, padding, and the onClick function.
+ */
+struct ButtonConfig
+{
+    std::optional<std::string> label;
+    std::string icon;
+    ImVec2 size;
+    float padding;
+    std::function<void()> onClick;
 };
 
 //-----------------------------------------------------------------------------
@@ -106,6 +143,9 @@ extern class ChatBot chatBot;
 
 // Global markdown fonts
 extern MarkdownFonts g_mdFonts;
+
+// Global icon fonts
+extern IconFonts g_iconFonts;
 
 //-----------------------------------------------------------------------------
 // [SECTION] Classes
@@ -176,22 +216,38 @@ private:
 auto initializeGLFW() -> bool;
 auto createWindow() -> GLFWwindow *;
 auto initializeGLAD() -> bool;
+auto LoadIconFont(ImGuiIO &io, const char *iconFontPath, float fontSize) -> ImFont *;
+auto LoadFont(ImGuiIO &imguiIO, const char *fontPath, ImFont *fallbackFont, float fontSize) -> ImFont *;
 void setupImGui(GLFWwindow *window);
 void mainLoop(GLFWwindow *window);
 void cleanup(GLFWwindow *window);
 
-// Rendering Functions
-void renderChatWindow(bool &focusInputField, float inputHeight);
-void renderChatHistory(const ChatHistory &chatHistory, float contentWidth);
-void renderMessage(const Message &msg, int index, float contentWidth);
-void pushIDAndColors(const Message &msg, int index);
-auto calculateDimensions(const Message &msg, float windowWidth) -> std::tuple<float, float, float>;
-void renderMessageContent(const Message &msg, float bubbleWidth, float bubblePadding);
-void renderTimestamp(const Message &msg, float bubblePadding);
-void renderButtons(const Message &msg, int index, float bubbleWidth, float bubblePadding);
-void renderInputField(bool &focusInputField, float inputHeight, float inputWidth);
-void setInputFieldStyle();
-void restoreInputFieldStyle();
-void handleInputSubmission(char *inputText, bool &focusInputField);
+// Custom UI Functions
+void renderSingleButton(const ButtonConfig &config);
+void renderButtonGroup(const std::vector<ButtonConfig> &buttons, float startX, float startY, float spacing = Config::Button::SPACING);
+
+namespace ChatWindow
+{
+    void renderChatWindow(bool &focusInputField, float inputHeight);
+    void renderChatHistory(const ChatHistory &chatHistory, float contentWidth);
+
+    namespace MessageBubble
+    {
+        void renderMessage(const Message &msg, int index, float contentWidth);
+        void pushIDAndColors(const Message &msg, int index);
+        auto calculateDimensions(const Message &msg, float windowWidth) -> std::tuple<float, float, float>;
+        void renderMessageContent(const Message &msg, float bubbleWidth, float bubblePadding);
+        void renderTimestamp(const Message &msg, float bubblePadding);
+        void renderButtons(const Message &msg, int index, float bubbleWidth, float bubblePadding);
+    }
+
+    namespace InputField
+    {
+        void setInputFieldStyle();
+        void restoreInputFieldStyle();
+        void handleInputSubmission(char *inputText, bool &focusInputField);
+        void renderInputField(bool &focusInputField, float inputHeight, float inputWidth);
+    }
+}
 
 #endif // KOLASAL_H
