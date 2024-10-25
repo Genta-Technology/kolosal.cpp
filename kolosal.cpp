@@ -518,17 +518,18 @@ void ChatWindow::MessageBubble::renderButtons(const Message &msg, int index, flo
 
     if (msg.isUserMessage())
     {
-        std::vector<ButtonConfig> userButtons = {
-            ButtonConfig{
-                .label = std::nullopt,
-                .icon = ICON_FA_COPY,
-                .size = ImVec2(Config::Button::WIDTH, 0),
-                .padding = Config::Button::SPACING,
-                .onClick = [&msg]()
-                {
-                    ImGui::SetClipboardText(msg.getContent().c_str());
-                    std::cout << "Copied message content to clipboard" << std::endl;
-                }}};
+        ButtonConfig copyButtonConfig{
+            .label = std::nullopt,
+            .icon = ICON_FA_COPY,
+            .size = ImVec2(Config::Button::WIDTH, 0),
+            .padding = Config::Button::SPACING,
+            .onClick = [&msg]()
+            {
+                ImGui::SetClipboardText(msg.getContent().c_str());
+                std::cout << "Copied message content to clipboard" << std::endl;
+            }};
+
+        std::vector<ButtonConfig> userButtons = {copyButtonConfig};
 
         renderButtonGroup(
             userButtons,
@@ -537,20 +538,27 @@ void ChatWindow::MessageBubble::renderButtons(const Message &msg, int index, flo
     }
     else
     {
-        std::vector<ButtonConfig> assistantButtons = {
-            ButtonConfig{
-                .label = std::nullopt,
-                .icon = ICON_FA_THUMBS_UP,
-                .size = ImVec2(Config::Button::WIDTH, 0),
-                .padding = Config::Button::SPACING,
-                .onClick = [index]()
-                {
-                    std::cout << "Like button clicked for message " << index << std::endl;
-                }},
-            ButtonConfig{.label = std::nullopt, .icon = ICON_FA_THUMBS_DOWN, .size = ImVec2(Config::Button::WIDTH, 0), .padding = Config::Button::SPACING, .onClick = [index]()
-                                                                                                                                                           {
-                                                                                                                                                               std::cout << "Dislike button clicked for message " << index << std::endl;
-                                                                                                                                                           }}};
+        ButtonConfig likeButtonConfig{
+            .label = std::nullopt,
+            .icon = ICON_FA_THUMBS_UP,
+            .size = ImVec2(Config::Button::WIDTH, 0),
+            .padding = Config::Button::SPACING,
+            .onClick = [index]()
+            {
+                std::cout << "Like button clicked for message " << index << std::endl;
+            }};
+
+        ButtonConfig dislikeButtonConfig{
+            .label = std::nullopt,
+            .icon = ICON_FA_THUMBS_DOWN,
+            .size = ImVec2(Config::Button::WIDTH, 0),
+            .padding = Config::Button::SPACING,
+            .onClick = [index]()
+            {
+                std::cout << "Dislike button clicked for message " << index << std::endl;
+            }};
+
+        std::vector<ButtonConfig> assistantButtons = { likeButtonConfig, dislikeButtonConfig };
 
         renderButtonGroup(
             assistantButtons,
