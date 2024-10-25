@@ -593,7 +593,8 @@ void renderInputField(bool& focusInputField, float inputHeight, float inputWidth
     }
 
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue |
-                               ImGuiInputTextFlags_CtrlEnterForNewLine;
+                                ImGuiInputTextFlags_CtrlEnterForNewLine |
+                                ImGuiInputTextFlags_ShiftEnterForNewLine;
 
     float availableWidth = ImGui::GetContentRegionAvail().x;
     float actualInputWidth = (inputWidth < availableWidth) ? inputWidth : availableWidth;
