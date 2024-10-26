@@ -2657,14 +2657,26 @@ bool ImGui::DragScalar(const char* label, ImGuiDataType data_type, void* p_data,
     }
 
     // Draw frame
-    const ImU32 frame_col = GetColorU32(g.ActiveId == id ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
+    const ImU32 frame_col = GetColorU32(g.ActiveId == id ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg, 1.0f + g.Style.SliderContrast);
+    const ImU32 frame_col_after = GetColorU32(g.ActiveId == id ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg, 1.0f - g.Style.SliderContrast);
     RenderNavCursor(frame_bb, id);
-    RenderFrame(frame_bb.Min, frame_bb.Max, frame_col, true, style.FrameRounding);
+    ImRect grab_bb;
 
     // Drag behavior
     const bool value_changed = DragBehavior(id, data_type, p_data, v_speed, p_min, p_max, format, flags);
     if (value_changed)
         MarkItemEdited(id);
+
+    ImRect draw_bb = frame_bb;
+    if (g.Style.SliderThickness != 1.0f)
+    {
+        float shrink_amount = (float)(int)((frame_bb.Max.y - frame_bb.Min.y) * 0.5f * (1.0f - g.Style.SliderThickness));
+        draw_bb.Min.y += shrink_amount;
+        draw_bb.Max.y -= shrink_amount;
+    }
+    // Render track
+    window->DrawList->AddRectFilled(draw_bb.Min, ImVec2(grab_bb.Min.x + (grab_bb.Max.x - grab_bb.Min.x) * 0.65f, draw_bb.Max.y), frame_col, style.FrameRounding, ImDrawFlags_RoundCornersLeft);
+    window->DrawList->AddRectFilled(ImVec2(grab_bb.Max.x - (grab_bb.Max.x - grab_bb.Min.x) * 0.35f, draw_bb.Min.y), draw_bb.Max, frame_col_after, style.FrameRounding, ImDrawFlags_RoundCornersRight);
 
     // Display value using user-provided display format so user can add prefix/suffix/decorations to the value.
     char value_buf[64];
@@ -3239,9 +3251,9 @@ bool ImGui::SliderScalar(const char* label, ImGuiDataType data_type, void* p_dat
     }
 
     // Draw frame
-    const ImU32 frame_col = GetColorU32(g.ActiveId == id ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
+    const ImU32 frame_col = GetColorU32(g.ActiveId == id ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg, 1.0f + g.Style.SliderContrast);
+    const ImU32 frame_col_after = GetColorU32(g.ActiveId == id ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg, 1.0f - g.Style.SliderContrast);
     RenderNavCursor(frame_bb, id);
-    RenderFrame(frame_bb.Min, frame_bb.Max, frame_col, true, g.Style.FrameRounding);
 
     // Slider behavior
     ImRect grab_bb;
@@ -3249,19 +3261,31 @@ bool ImGui::SliderScalar(const char* label, ImGuiDataType data_type, void* p_dat
     if (value_changed)
         MarkItemEdited(id);
 
+    ImRect draw_bb = frame_bb;
+    if (g.Style.SliderThickness != 1.0f)
+    {
+        float shrink_amount = (float)(int)((frame_bb.Max.y - frame_bb.Min.y) * 0.5f * (1.0f - g.Style.SliderThickness));
+        draw_bb.Min.y += shrink_amount;
+        draw_bb.Max.y -= shrink_amount;
+    }
+    // Render track
+    window->DrawList->AddRectFilled(draw_bb.Min, ImVec2(grab_bb.Min.x + (grab_bb.Max.x - grab_bb.Min.x) * 0.65f, draw_bb.Max.y), frame_col, style.FrameRounding, ImDrawFlags_RoundCornersLeft);
+    window->DrawList->AddRectFilled(ImVec2(grab_bb.Max.x - (grab_bb.Max.x - grab_bb.Min.x) * 0.35f, draw_bb.Min.y), draw_bb.Max, frame_col_after, style.FrameRounding, ImDrawFlags_RoundCornersRight);
+
+
     // Render grab
     if (grab_bb.Max.x > grab_bb.Min.x)
         window->DrawList->AddRectFilled(grab_bb.Min, grab_bb.Max, GetColorU32(g.ActiveId == id ? ImGuiCol_SliderGrabActive : ImGuiCol_SliderGrab), style.GrabRounding);
 
     // Display value using user-provided display format so user can add prefix/suffix/decorations to the value.
-    char value_buf[64];
-    const char* value_buf_end = value_buf + DataTypeFormatString(value_buf, IM_ARRAYSIZE(value_buf), data_type, p_data, format);
-    if (g.LogEnabled)
-        LogSetNextTextDecoration("{", "}");
-    RenderTextClipped(frame_bb.Min, frame_bb.Max, value_buf, value_buf_end, NULL, ImVec2(0.5f, 0.5f));
+    // char value_buf[64];
+    // const char* value_buf_end = value_buf + DataTypeFormatString(value_buf, IM_ARRAYSIZE(value_buf), data_type, p_data, format);
+    // if (g.LogEnabled)
+    //     LogSetNextTextDecoration("{", "}");
+    // RenderTextClipped(frame_bb.Min, frame_bb.Max, value_buf, value_buf_end, NULL, ImVec2(0.5f, 0.5f));
 
-    if (label_size.x > 0.0f)
-        RenderText(ImVec2(frame_bb.Max.x + style.ItemInnerSpacing.x, frame_bb.Min.y + style.FramePadding.y), label);
+    // if (label_size.x > 0.0f)
+    //     RenderText(ImVec2(frame_bb.Max.x + style.ItemInnerSpacing.x, frame_bb.Min.y + style.FramePadding.y), label);
 
     IMGUI_TEST_ENGINE_ITEM_INFO(id, label, g.LastItemData.StatusFlags | (temp_input_allowed ? ImGuiItemStatusFlags_Inputable : 0));
     return value_changed;
@@ -3388,15 +3412,28 @@ bool ImGui::VSliderScalar(const char* label, const ImVec2& size, ImGuiDataType d
     }
 
     // Draw frame
-    const ImU32 frame_col = GetColorU32(g.ActiveId == id ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
+    const ImU32 frame_col = GetColorU32(g.ActiveId == id ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg, 1.0f + g.Style.SliderContrast);
+    const ImU32 frame_col_after = GetColorU32(g.ActiveId == id ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg, 1.0f - g.Style.SliderContrast);
     RenderNavCursor(frame_bb, id);
-    RenderFrame(frame_bb.Min, frame_bb.Max, frame_col, true, g.Style.FrameRounding);
 
     // Slider behavior
     ImRect grab_bb;
     const bool value_changed = SliderBehavior(frame_bb, id, data_type, p_data, p_min, p_max, format, flags | ImGuiSliderFlags_Vertical, &grab_bb);
     if (value_changed)
         MarkItemEdited(id);
+
+    ImRect draw_bb = frame_bb;
+    if (g.Style.SliderThickness != 1.0f)
+    {
+        float shrink_amount = (float)(int)((frame_bb.Max.x - frame_bb.Min.x) * 0.5f * (1.0f - g.Style.SliderThickness));
+        draw_bb.Min.x += shrink_amount;
+        draw_bb.Max.x -= shrink_amount;
+    }
+
+    // Render track
+    window->DrawList->AddRectFilled(ImVec2(draw_bb.Min.x, grab_bb.Max.y - (grab_bb.Max.y - grab_bb.Min.y) * 0.65f), draw_bb.Max, frame_col, style.FrameRounding, ImDrawFlags_RoundCornersBottom);
+    window->DrawList->AddRectFilled(draw_bb.Min, ImVec2(draw_bb.Max.x, grab_bb.Min.y + (grab_bb.Max.y - grab_bb.Min.y) * 0.35f), frame_col_after, style.FrameRounding, ImDrawFlags_RoundCornersTop);
+
 
     // Render grab
     if (grab_bb.Max.y > grab_bb.Min.y)
@@ -5104,7 +5141,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
     if (!is_multiline)
     {
         RenderNavCursor(frame_bb, id);
-        RenderFrame(frame_bb.Min, frame_bb.Max, GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
+        RenderFrame(frame_bb.Min, frame_bb.Max, GetColorU32((hovered || g.ActiveId == id) ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg), true, style.FrameRounding);
     }
 
     const ImVec4 clip_rect(frame_bb.Min.x, frame_bb.Min.y, frame_bb.Min.x + inner_size.x, frame_bb.Min.y + inner_size.y); // Not using frame_bb.Max because we have adjusted size
