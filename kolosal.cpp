@@ -301,21 +301,39 @@ void mainLoop(GLFWwindow *window)
     bool focusInputField = true;
     float inputHeight = Config::INPUT_HEIGHT; // Set your desired input field height here
 
+    // Initialize sidebar width with a default value from the configuration
+    float sidebarWidth = Config::ModelSettings::SIDEBAR_WIDTH;
+
     while (glfwWindowShouldClose(window) == GLFW_FALSE)
     {
         glfwPollEvents();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        ChatWindow::renderChatWindow(focusInputField, inputHeight);
+
+        // Render the sidebar first to capture any width changes
+        ModelSettings::render(sidebarWidth);
+
+        // Render the main chat window, passing the current sidebar width
+        ChatWindow::render(focusInputField, inputHeight, sidebarWidth);
+
+        // Render the ImGui frame
         ImGui::Render();
+
+        // Get the framebuffer size
         int display_w;
         int display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
+
+        // Set the viewport and clear the screen
         glViewport(0, 0, display_w, display_h);
         glClearColor(Config::BackgroundColor::R, Config::BackgroundColor::G, Config::BackgroundColor::B, Config::BackgroundColor::A);
         glClear(GL_COLOR_BUFFER_BIT);
+
+        // Render ImGui draw data
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        // Swap buffers
         glfwSwapBuffers(window);
     }
 }
@@ -654,66 +672,150 @@ void ChatWindow::renderChatHistory(const ChatHistory &chatHistory, float content
 }
 
 /**
- * @brief Renders the chat window to cover the full width and height of the application window.
+ * @brief Renders the chat window to cover the full width and height of the application window,
+ *        minus the sidebar width.
  *
  * @param focusInputField A boolean reference to control the focus state of the input field.
  * @param inputHeight The height of the input field.
+ * @param sidebarWidth The current width of the sidebar.
  */
-void ChatWindow::renderChatWindow(bool &focusInputField, float inputHeight)
+void ChatWindow::render(bool &focusInputField, float inputHeight, float sidebarWidth)
 {
     ImGuiIO &imguiIO = ImGui::GetIO();
-
-    // Set window to cover the entire display
+    
+    // Calculate the size of the chat window based on the sidebar width
+    ImVec2 windowSize = ImVec2(imguiIO.DisplaySize.x, imguiIO.DisplaySize.y);
+    
+    // Set window to cover the remaining display area
     ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(imguiIO.DisplaySize);
-
+    ImGui::SetNextWindowSize(windowSize);
+    
     ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar |
                                     ImGuiWindowFlags_NoResize |
                                     ImGuiWindowFlags_NoMove |
                                     ImGuiWindowFlags_NoCollapse |
                                     ImGuiWindowFlags_NoBringToFrontOnFocus;
-
+    
     ImGui::Begin("Chatbot", nullptr, window_flags);
-
+    
     // Calculate available width and set max content width
     float availableWidth = ImGui::GetContentRegionAvail().x;
     float contentWidth = (availableWidth < Config::CHAT_WINDOW_CONTENT_WIDTH) ? availableWidth : Config::CHAT_WINDOW_CONTENT_WIDTH;
     float paddingX = (availableWidth - contentWidth) / 2.0F;
-
+    
     // Center the content horizontally
     if (paddingX > 0.0F)
     {
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
     }
-
+    
     // Begin a child window to contain the chat history and input field
     ImGui::BeginChild("ContentRegion", ImVec2(contentWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
-
+    
     // Calculate available height for the input field and chat history
     float availableHeight = ImGui::GetContentRegionAvail().y;
-
+    
     // Adjust the height of the scrolling region
     float scrollingRegionHeight = availableHeight - inputHeight - Config::BOTTOM_MARGIN;
-
+    
     // Ensure the scrolling region height is not negative
     if (scrollingRegionHeight < 0.0F)
     {
         scrollingRegionHeight = 0.0F;
     }
-
+    
     // Begin the child window for the chat history
     ImGui::BeginChild("ScrollingRegion", ImVec2(0, scrollingRegionHeight), false, ImGuiWindowFlags_NoScrollbar);
-
+    
     // Render chat history
     ChatWindow::renderChatHistory(chatBot.getChatHistory(), contentWidth);
-
+    
     ImGui::EndChild();
-
+    
     // Render the input field at the bottom
     ChatWindow::InputField::renderInputField(focusInputField, inputHeight, contentWidth);
-
+    
     ImGui::EndChild(); // End of ContentRegion child window
+    
+    ImGui::End();
+}
 
+//-----------------------------------------------------------------------------
+// [SECTION] Model Settings Rendering Functions
+//-----------------------------------------------------------------------------
+
+/**
+ * @brief Renders the sidebar window on the right side of the main application window.
+ */
+void ModelSettings::render(float &sidebarWidth)
+{
+    // Access ImGui IO for display size
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Define sidebar dimensions based on the current sidebarWidth
+    const float sidebarHeight = io.DisplaySize.y; // Full height of the window
+
+    // Always set the position and size each frame
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - sidebarWidth, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(sidebarWidth, sidebarHeight), ImGuiCond_Always);
+
+    // Set size constraints for the sidebar
+    ImGui::SetNextWindowSizeConstraints(ImVec2(Config::ModelSettings::MIN_SIDEBAR_WIDTH, sidebarHeight), ImVec2(Config::ModelSettings::MAX_SIDEBAR_WIDTH, sidebarHeight));
+
+    // Define window flags to allow resizing but prevent moving, collapsing, etc.
+    ImGuiWindowFlags sidebarFlags = ImGuiWindowFlags_NoMove |
+                                    ImGuiWindowFlags_NoCollapse |
+                                    ImGuiWindowFlags_NoTitleBar |
+                                    ImGuiWindowFlags_NoScrollbar;
+
+    // Begin the sidebar window
+    ImGui::Begin("Model Settings", nullptr, sidebarFlags);
+
+    // Update sidebarWidth based on the window's current size
+    ImVec2 currentSize = ImGui::GetWindowSize();
+    sidebarWidth = currentSize.x;
+
+    // Optional: Set a distinct background color for the sidebar
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+
+    // Sidebar Content Starts Here
+    ImGui::Text("### Sidebar"); // Hidden header to maintain spacing
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Example Content: Navigation Buttons
+    ImGui::Text("Navigation");
+    ImGui::Separator();
+    if (ImGui::Button("Home"))
+    {
+        // Handle Home button click
+        std::cout << "Home button clicked" << std::endl;
+    }
+    if (ImGui::Button("Settings"))
+    {
+        // Handle Settings button click
+        std::cout << "Settings button clicked" << std::endl;
+    }
+    if (ImGui::Button("Help"))
+    {
+        // Handle Help button click
+        std::cout << "Help button clicked" << std::endl;
+    }
+    ImGui::Spacing();
+
+    // Example Content: Additional Information
+    ImGui::Text("Statistics");
+    ImGui::Separator();
+    ImGui::Text("Messages Sent: %d", static_cast<int>(chatBot.getChatHistory().getMessages().size()));
+    ImGui::Text("Active Users: %d", 1); // Placeholder value
+    // Add more sidebar content as needed
+
+    // Sidebar Content Ends Here
+
+    // Restore the previous style color
+    ImGui::PopStyleColor();
+
+    // End the sidebar window
     ImGui::End();
 }
 

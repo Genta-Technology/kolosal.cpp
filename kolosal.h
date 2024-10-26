@@ -79,6 +79,13 @@ namespace Config
         constexpr size_t TEXT_SIZE = 1024;
     }
 
+    namespace ModelSettings
+    {
+        constexpr float SIDEBAR_WIDTH = 200.0F;
+        constexpr float MIN_SIDEBAR_WIDTH = 200.0F;
+        constexpr float MAX_SIDEBAR_WIDTH = 400.0F;
+    }
+
     constexpr float HALF_DIVISOR = 2.0F;
     constexpr float BOTTOM_MARGIN = 10.0F;
     constexpr float INPUT_HEIGHT = 100.0F;
@@ -228,7 +235,7 @@ void renderButtonGroup(const std::vector<ButtonConfig> &buttons, float startX, f
 
 namespace ChatWindow
 {
-    void renderChatWindow(bool &focusInputField, float inputHeight);
+    void render(bool &focusInputField, float inputHeight, float sidebarWidth);
     void renderChatHistory(const ChatHistory &chatHistory, float contentWidth);
 
     namespace MessageBubble
@@ -250,4 +257,8 @@ namespace ChatWindow
     }
 }
 
+namespace ModelSettings
+{
+    void render(float &sidebarWidth);
+}
 #endif // KOLASAL_H
