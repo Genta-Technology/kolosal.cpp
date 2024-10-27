@@ -641,7 +641,7 @@ void Widgets::Slider::render(const char *label, float &value, float minValue, fl
 
     // Calculate the position to align the input field's right edge with the desired right edge
     float rightEdge = sliderWidth + paddingX;
-    float inputPositionX = rightEdge - adjustedInputWidth;
+    float inputPositionX = rightEdge - adjustedInputWidth + 8;
 
     // Set the cursor position to the calculated position
     ImGui::SetCursorPosX(inputPositionX);
