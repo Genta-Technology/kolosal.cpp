@@ -89,8 +89,8 @@ namespace Config
     namespace Color
     {
         constexpr ImVec4 TRANSPARENT = ImVec4(0.0F, 0.0F, 0.0F, 0.0F);
-        constexpr ImVec4 PRIMARY = ImVec4(0.3F, 0.3F, 0.3F, 0.8F);
-        constexpr ImVec4 SECONDARY = ImVec4(0.3F, 0.3F, 0.3F, 0.5F);
+        constexpr ImVec4 PRIMARY = ImVec4(0.3F, 0.3F, 0.3F, 0.5F);
+        constexpr ImVec4 SECONDARY = ImVec4(0.3F, 0.3F, 0.3F, 0.3F);
     } // namespace Color
 
     namespace Slider
@@ -102,6 +102,19 @@ namespace Config
         constexpr float GRAB_RADIUS = 100.0f;
         constexpr float GRAB_MIN_SIZE = 5.0f;
     } // namespace Slider
+
+    namespace ComboBox
+    {
+        constexpr ImVec4 COMBO_BG_COLOR = ImVec4(0.15F, 0.15F, 0.15F, 1.0F);
+        constexpr ImVec4 COMBO_BORDER_COLOR = ImVec4(0.0F, 0.0F, 0.0F, 0.0F);
+        constexpr ImVec4 TEXT_COLOR = ImVec4(1.0F, 1.0F, 1.0F, 1.0F);
+        constexpr ImVec4 BUTTON_HOVERED_COLOR = ImVec4(0.3F, 0.3F, 0.3F, 0.5F);
+        constexpr ImVec4 BUTTON_ACTIVE_COLOR = ImVec4(0.3F, 0.3F, 0.3F, 0.5F);
+        constexpr ImVec4 POPUP_BG_COLOR = ImVec4(0.12F, 0.12F, 0.12F, 1.0F);
+
+        constexpr float FRAME_ROUNDING = 5.0F;
+        constexpr float POPUP_ROUNDING = 2.0F;
+    } // namespace ComboBox
 
     constexpr float HALF_DIVISOR = 2.0F;
     constexpr float BOTTOM_MARGIN = 10.0F;
@@ -149,8 +162,9 @@ struct IconFonts
  */
 struct ButtonConfig
 {
+    std::string id;
     std::optional<std::string> label;
-    std::string icon;
+    std::optional<std::string> icon;
     ImVec2 size;
     float padding;
     std::function<void()> onClick;
@@ -162,6 +176,7 @@ struct ButtonConfig
 
 struct LabelConfig
 {
+    std::string id;
     std::string label;
     std::optional<std::string> icon = "";
     ImVec2 size;
@@ -170,6 +185,29 @@ struct LabelConfig
     std::optional<float> gap = 5.0F;
     bool isBold;
     bool iconSolid;
+};
+
+struct ModelPreset
+{
+    std::string name;
+
+    // prompt
+    char systemPrompt[8192] = "";
+
+    // sampling
+    float temperature = 0.7F;
+    float top_p = 0.9F;
+    // TODO: Use int instead of float
+    // I use float right now because ImGui::SliderFloat requires a float
+    // so it needed to create a new custom slider for int
+    float top_k = 50.0F;
+    int random_seed = 0;
+
+    // generation
+    // TODO: Use int instead of float
+    float max_new_tokens = 2048.0F;
+    // TODO: Use int instead of float
+    float min_length = 0.0F;
 };
 
 //-----------------------------------------------------------------------------
@@ -263,6 +301,9 @@ void setupImGui(GLFWwindow *window);
 void mainLoop(GLFWwindow *window);
 void cleanup(GLFWwindow *window);
 
+// Utility Functions
+auto RGBAToImVec4(float r, float g, float b, float a) -> ImVec4;
+
 // Custom UI Functions
 namespace Widgets
 {
@@ -296,13 +337,18 @@ namespace Widgets
     namespace IntInputField
     {
         void render(const char *label, int &value, const float inputWidth, const float paddingX = 5.0F);
-    }
+    } // namespace IntInputField
+
+    namespace ComboBox
+    {
+        auto render(const char *label, const char **items, int itemsCount, int &selectedItem, float width) -> bool;
+    } // namespace ComboBox
 
 } // namespace Widgets
 
 namespace ChatWindow
 {
-    void render(bool &focusInputField, float inputHeight, float sidebarWidth);
+    void render(float inputHeight, float sidebarWidth);
     void renderChatHistory(const ChatHistory &chatHistory, float contentWidth);
     void renderInputField(float inputHeight, float inputWidth);
 
@@ -321,6 +367,8 @@ namespace ChatWindow
 namespace ModelSettings
 {
     void render(float &sidebarWidth);
+    void renderModelPresetsSelection(std::vector<ModelPreset> &presets, int &selectedPreset, const float sidebarWidth);
+    void renderSamplingSettings(ModelPreset &preset, const float sidebarWidth);
 } // namespace ModelSettings
 
 #endif // KOLASAL_H

@@ -299,7 +299,6 @@ void setupImGui(GLFWwindow *window)
  */
 void mainLoop(GLFWwindow *window)
 {
-    bool focusInputField = true;
     float inputHeight = Config::INPUT_HEIGHT; // Set your desired input field height here
 
     // Initialize sidebar width with a default value from the configuration
@@ -316,7 +315,7 @@ void mainLoop(GLFWwindow *window)
         ModelSettings::render(sidebarWidth);
 
         // Render the main chat window, passing the current sidebar width
-        ChatWindow::render(focusInputField, inputHeight, sidebarWidth);
+        ChatWindow::render(inputHeight, sidebarWidth);
 
         // Render the ImGui frame
         ImGui::Render();
@@ -354,6 +353,24 @@ void cleanup(GLFWwindow *window)
 }
 
 //-----------------------------------------------------------------------------
+// [SECTION] Utility Functions
+//-----------------------------------------------------------------------------
+
+/**
+ * @brief Converts RGBA color values to an ImVec4 color.
+ *
+ * @param r The red component of the color.
+ * @param g The green component of the color.
+ * @param b The blue component of the color.
+ * @param a The alpha component of the color.
+ * @return ImVec4 The converted ImVec4 color.
+ */
+auto RGBAToImVec4(float r, float g, float b, float a) -> ImVec4
+{
+    return ImVec4(r / 255, g / 255, b / 255, a / 255);
+}
+
+//-----------------------------------------------------------------------------
 // [SECTION] Custom UI Functions
 //-----------------------------------------------------------------------------
 
@@ -365,7 +382,7 @@ void cleanup(GLFWwindow *window)
 void Widgets::Button::render(const ButtonConfig &config)
 {
     std::string buttonText;
-    bool hasIcon = !config.icon.empty();
+    bool hasIcon = config.icon.has_value() && !config.icon->empty();
     bool hasLabel = config.label.has_value();
 
     ImGui::PushStyleColor(ImGuiCol_Button, config.backgroundColor.value());
@@ -389,7 +406,7 @@ void Widgets::Button::render(const ButtonConfig &config)
 
     if (hasIcon && hasLabel)
     {
-        buttonText = config.icon;
+        buttonText = config.icon.value();
         if (ImGui::Button(buttonText.c_str(), ImVec2(config.size.x / 4, config.size.y)))
         {
             if (config.onClick)
@@ -409,7 +426,7 @@ void Widgets::Button::render(const ButtonConfig &config)
     }
     else if (hasIcon)
     {
-        buttonText = config.icon;
+        buttonText = config.icon.value();
         if (ImGui::Button(buttonText.c_str(), config.size))
         {
             if (config.onClick)
@@ -520,7 +537,8 @@ void Widgets::InputField::handleSubmission(char *inputText, bool &focusInputFiel
     if (!inputStr.empty())
     {
         processInput(inputStr);
-        if (clearInput) {
+        if (clearInput)
+        {
             inputText[0] = '\0'; // Clear input after submission
         }
     }
@@ -534,8 +552,8 @@ void Widgets::InputField::render(
     const std::function<void(const std::string &)> &processInput, bool &focusInputField)
 {
     // Set style
-    Widgets::InputField::setStyle(Config::Style::FRAME_ROUNDING, ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y), 
-                                ImVec4(Config::Style::INPUT_FIELD_BG_COLOR, Config::Style::INPUT_FIELD_BG_COLOR, Config::Style::INPUT_FIELD_BG_COLOR, 1.0F));
+    Widgets::InputField::setStyle(Config::Style::FRAME_ROUNDING, ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y),
+                                  ImVec4(Config::Style::INPUT_FIELD_BG_COLOR, Config::Style::INPUT_FIELD_BG_COLOR, Config::Style::INPUT_FIELD_BG_COLOR, 1.0F));
 
     // Set keyboard focus initially, then reset
     if (focusInputField)
@@ -550,8 +568,8 @@ void Widgets::InputField::render(
     if (ImGui::InputTextMultiline(label, inputTextBuffer, Config::InputField::TEXT_SIZE, inputSize, inputFlags))
     {
         Widgets::InputField::handleSubmission(inputTextBuffer, focusInputField, processInput,
-            (inputFlags & ImGuiInputTextFlags_CtrlEnterForNewLine) ||
-            (inputFlags & ImGuiInputTextFlags_ShiftEnterForNewLine));
+                                              (inputFlags & ImGuiInputTextFlags_CtrlEnterForNewLine) ||
+                                                  (inputFlags & ImGuiInputTextFlags_ShiftEnterForNewLine));
     }
 
     ImGui::PopTextWrapPos();
@@ -563,7 +581,7 @@ void Widgets::InputField::render(
         ImGui::SetItemAllowOverlap();
 
         // Get the current window's draw list
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
 
         // Get the input field's bounding box
         ImVec2 inputMin = ImGui::GetItemRectMin();
@@ -586,8 +604,7 @@ void Widgets::InputField::render(
             placeholderColor,
             placeholderText.c_str(),
             nullptr,
-            wrapWidth
-        );
+            wrapWidth);
     }
 
     // Restore original style
@@ -603,7 +620,7 @@ void Widgets::Slider::render(const char *label, float &value, float minValue, fl
 
     // Apply horizontal padding and render label
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
-    Widgets::Label::render(LabelConfig{.label = renderLabel, .size = ImVec2(0, 0), .isBold = false, .iconSolid = false});
+    Widgets::Label::render(LabelConfig{.id = label, .label = renderLabel, .size = ImVec2(0, 0), .isBold = false, .iconSolid = false});
 
     // Move the cursor to the right edge minus the input field width and padding
     ImGui::SameLine();
@@ -634,8 +651,10 @@ void Widgets::Slider::render(const char *label, float &value, float minValue, fl
     if (ImGui::InputFloat((std::string(label) + "_input").c_str(), &value, 0.0f, 0.0f, format))
     {
         // Clamp the value within the specified range
-        if (value < minValue) value = minValue;
-        if (value > maxValue) value = maxValue;
+        if (value < minValue)
+            value = minValue;
+        if (value > maxValue)
+            value = maxValue;
     }
     ImGui::PopItemWidth();
 
@@ -669,7 +688,7 @@ void Widgets::Slider::render(const char *label, float &value, float minValue, fl
     ImGui::PopItemWidth();
 
     // Restore previous styling
-    ImGui::PopStyleVar(3); // FramePadding and GrabRounding
+    ImGui::PopStyleVar(3);   // FramePadding and GrabRounding
     ImGui::PopStyleColor(6); // Reset all custom colors
 }
 
@@ -682,7 +701,7 @@ void Widgets::IntInputField::render(const char *label, int &value, const float i
 
     // Apply horizontal padding and render label
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
-    Widgets::Label::render(LabelConfig{.label = renderLabel, .size = ImVec2(0, 0), .isBold = false, .iconSolid = false});
+    Widgets::Label::render(LabelConfig{.id = label, .label = renderLabel, .size = ImVec2(0, 0), .isBold = false, .iconSolid = false});
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY());
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
@@ -698,13 +717,60 @@ void Widgets::IntInputField::render(const char *label, int &value, const float i
     if (ImGui::InputInt(label, &value, 0, 0))
     {
         // Clamp the value within the specified range
-        if (value < 0) value = 0;
+        if (value < 0)
+            value = 0;
     }
     ImGui::PopItemWidth();
 
     // Restore previous styling
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
+}
+
+auto Widgets::ComboBox::render(const char *label, const char **items, int itemsCount, int &selectedItem, float width) -> bool
+{
+    // Push style variables for rounded corners
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Config::ComboBox::FRAME_ROUNDING); // Round the frame corners
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Config::ComboBox::POPUP_ROUNDING); // Round the popup corners
+
+    // Push style colors
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, Config::ComboBox::COMBO_BG_COLOR);             // ComboBox background
+    ImGui::PushStyleColor(ImGuiCol_Border, Config::ComboBox::COMBO_BORDER_COLOR);          // ComboBox border
+    ImGui::PushStyleColor(ImGuiCol_Text, Config::ComboBox::TEXT_COLOR);                    // ComboBox text
+    ImGui::PushStyleColor(ImGuiCol_Button, Config::ComboBox::COMBO_BG_COLOR);              // Button background
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Config::ComboBox::BUTTON_HOVERED_COLOR); // Button hovered
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Config::ComboBox::BUTTON_ACTIVE_COLOR);   // Button active
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, Config::ComboBox::POPUP_BG_COLOR);             // Popup background
+
+    // Set the ComboBox width
+    ImGui::SetNextItemWidth(width);
+
+    // Render the ComboBox
+    bool changed = false;
+    if (ImGui::BeginCombo(label, items[selectedItem]))
+    {
+        for (int i = 0; i < itemsCount; ++i)
+        {
+            bool isSelected = (selectedItem == i);
+            if (ImGui::Selectable(items[i], isSelected))
+            {
+                selectedItem = i;
+                changed = true;
+            }
+
+            if (isSelected)
+            {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    // Pop style colors and variables to revert to previous styles
+    ImGui::PopStyleColor(7); // Number of colors pushed
+    ImGui::PopStyleVar(2);   // Number of style vars pushed
+
+    return changed; // Return true if the selected item has changed
 }
 
 //-----------------------------------------------------------------------------
@@ -800,6 +866,7 @@ void ChatWindow::MessageBubble::renderButtons(const Message &msg, int index, flo
     if (msg.isUserMessage())
     {
         ButtonConfig copyButtonConfig{
+            .id = "##copy" + std::to_string(index),
             .label = std::nullopt,
             .icon = ICON_FA_COPY,
             .size = ImVec2(Config::Button::WIDTH, 0),
@@ -820,6 +887,7 @@ void ChatWindow::MessageBubble::renderButtons(const Message &msg, int index, flo
     else
     {
         ButtonConfig likeButtonConfig{
+            .id = "##like" + std::to_string(index),
             .label = std::nullopt,
             .icon = ICON_FA_THUMBS_UP,
             .size = ImVec2(Config::Button::WIDTH, 0),
@@ -830,6 +898,7 @@ void ChatWindow::MessageBubble::renderButtons(const Message &msg, int index, flo
             }};
 
         ButtonConfig dislikeButtonConfig{
+            .id = "##dislike" + std::to_string(index),
             .label = std::nullopt,
             .icon = ICON_FA_THUMBS_DOWN,
             .size = ImVec2(Config::Button::WIDTH, 0),
@@ -839,7 +908,7 @@ void ChatWindow::MessageBubble::renderButtons(const Message &msg, int index, flo
                 std::cout << "Dislike button clicked for message " << index << std::endl;
             }};
 
-        std::vector<ButtonConfig> assistantButtons = { likeButtonConfig, dislikeButtonConfig };
+        std::vector<ButtonConfig> assistantButtons = {likeButtonConfig, dislikeButtonConfig};
 
         Widgets::Button::renderGroup(
             assistantButtons,
@@ -942,25 +1011,27 @@ void ChatWindow::renderChatHistory(const ChatHistory &chatHistory, float content
  * @param inputHeight The height of the input field.
  * @param sidebarWidth The current width of the sidebar.
  */
-void ChatWindow::render(bool &focusInputField, float inputHeight, float sidebarWidth)
+void ChatWindow::render(float inputHeight, float sidebarWidth)
 {
     ImGuiIO &imguiIO = ImGui::GetIO();
-    
+
     // Calculate the size of the chat window based on the sidebar width
     ImVec2 windowSize = ImVec2(imguiIO.DisplaySize.x - sidebarWidth, imguiIO.DisplaySize.y);
-    
+
     // Set window to cover the remaining display area
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
     ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
-    
+
     ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
                                    ImGuiWindowFlags_NoResize |
                                    ImGuiWindowFlags_NoMove |
                                    ImGuiWindowFlags_NoCollapse |
                                    ImGuiWindowFlags_NoBringToFrontOnFocus;
-    
+    // Remove window border
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0F);
+
     ImGui::Begin("Chatbot", nullptr, windowFlags);
-    
+
     // Calculate available width for content
     float availableWidth = ImGui::GetContentRegionAvail().x;
     float contentWidth = (availableWidth < Config::CHAT_WINDOW_CONTENT_WIDTH) ? availableWidth : Config::CHAT_WINDOW_CONTENT_WIDTH;
@@ -975,10 +1046,10 @@ void ChatWindow::render(bool &focusInputField, float inputHeight, float sidebarW
     // Begin the main scrolling region for the chat history
     float availableHeight = ImGui::GetContentRegionAvail().y - inputHeight - Config::BOTTOM_MARGIN;
     ImGui::BeginChild("ChatHistoryRegion", ImVec2(contentWidth, availableHeight), false, ImGuiWindowFlags_NoScrollbar);
-    
+
     // Render chat history
     ChatWindow::renderChatHistory(chatBot.getChatHistory(), contentWidth);
-    
+
     ImGui::EndChild(); // End of ChatHistoryRegion
 
     // Add some spacing or separator if needed
@@ -992,6 +1063,9 @@ void ChatWindow::render(bool &focusInputField, float inputHeight, float sidebarW
     ChatWindow::renderInputField(inputHeight, contentWidth);
 
     ImGui::End(); // End of Chatbot window
+
+    // Restore the window border size
+    ImGui::PopStyleVar();
 }
 
 //-----------------------------------------------------------------------------
@@ -1008,18 +1082,19 @@ void ChatWindow::renderInputField(float inputHeight, float inputWidth)
 {
     static std::array<char, Config::InputField::TEXT_SIZE> inputTextBuffer = {0};
     static bool focusInputField = true;
-    
+
     // Define the input size
     ImVec2 inputSize = ImVec2(inputWidth, inputHeight);
 
     // Define a lambda to process the submitted input
-    auto processInput = [](const std::string &input) {
+    auto processInput = [](const std::string &input)
+    {
         chatBot.processUserInput(input);
     };
 
     // Render the input field widget with a placeholder
-    Widgets::InputField::render("##chatinput", inputTextBuffer.data(), inputSize, 
-                                "Type a message and press Enter to send (Ctrl+Enter for new line)", 
+    Widgets::InputField::render("##chatinput", inputTextBuffer.data(), inputSize,
+                                "Type a message and press Enter to send (Ctrl+Enter or Shift+Enter for new line)",
                                 ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine | ImGuiInputTextFlags_ShiftEnterForNewLine,
                                 processInput, focusInputField);
 }
@@ -1028,13 +1103,163 @@ void ChatWindow::renderInputField(float inputHeight, float inputWidth)
 // [SECTION] Model Settings Rendering Functions
 //-----------------------------------------------------------------------------
 
+void ModelSettings::renderSamplingSettings(ModelPreset &preset, const float sidebarWidth)
+{
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    Widgets::Label::render({.id = "##systemprompt",
+                            .label = "System Prompt",
+                            .icon = ICON_FA_COG,
+                            .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
+                            .isBold = true});
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    // Input field for system prompt
+    static bool focusSystemPrompt = true;
+    ImVec2 inputSize = ImVec2(sidebarWidth - 20, 100); // Sidebar width minus padding
+    Widgets::InputField::render(
+        "##systemprompt", preset.systemPrompt, inputSize,
+        "Enter your system prompt here...", // Placeholder text
+        ImGuiInputTextFlags_EnterReturnsTrue,
+        [](const std::string &input)
+        {
+            // TODO: Handle system prompt submission logic here
+        },
+        focusSystemPrompt);
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    Widgets::Label::render({.id = "##modelconfig",
+                            .label = "Model Configuration",
+                            .icon = ICON_FA_SLIDERS_H,
+                            .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
+                            .isBold = true});
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    // sampling
+    Widgets::Slider::render("##temperature", preset.temperature, 0.0f, 1.0f, sidebarWidth - 30);
+    Widgets::Slider::render("##top_p", preset.top_p, 0.0f, 1.0f, sidebarWidth - 30);
+    Widgets::Slider::render("##top_k", preset.top_k, 0.0f, 100.0f, sidebarWidth - 30, "%.0f");
+    Widgets::IntInputField::render("##random_seed", preset.random_seed, sidebarWidth - 30);
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    // generation
+    Widgets::Slider::render("##min_length", preset.min_length, 0.0f, 4096.0f, sidebarWidth - 30, "%.0f");
+    Widgets::Slider::render("##max_new_tokens", preset.max_new_tokens, 0.0f, 4096.0f, sidebarWidth - 30, "%.0f");
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+}
+
+void ModelSettings::renderModelPresetsSelection(std::vector<ModelPreset> &presets, int &selectedPreset, const float sidebarWidth)
+{
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    Widgets::Label::render({.id = "##modelpresets",
+                            .label = "Model Presets",
+                            .icon = ICON_FA_BOX_OPEN,
+                            .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
+                            .isBold = true});
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    // Define the model presets as a string array
+    std::vector<const char *> presetNames;
+    for (const auto &preset : presets)
+    {
+        presetNames.push_back(preset.name.c_str());
+    }
+
+    // Render the ComboBox for model presets
+    float comboBoxWidth = sidebarWidth - 54; // Adjust width to make room for the delete button
+    if (Widgets::ComboBox::render("##modelpresets", presetNames.data(), presetNames.size(), selectedPreset, comboBoxWidth))
+    {
+        // Handle preset selection logic here
+    }
+
+    // Put the delete button beside the ComboBox
+    ImGui::SameLine();
+    ButtonConfig deleteButton{
+        .id = "##delete",
+        .label = std::nullopt,
+        .icon = ICON_FA_TRASH,
+        .size = ImVec2(24, 0),
+        .padding = Config::Button::SPACING,
+        .onClick = [&presets, &selectedPreset]()
+        {
+            if (selectedPreset >= 0 && selectedPreset < presets.size())
+            {
+                presets.erase(presets.begin() + selectedPreset);
+                selectedPreset = (selectedPreset >= presets.size()) ? presets.size() - 1 : selectedPreset;
+            }
+        },
+        .iconSolid = true,
+        .backgroundColor = Config::Color::TRANSPARENT,
+        .hoverColor = RGBAToImVec4(191, 88, 86, 255),
+        .activeColor = RGBAToImVec4(165, 29, 45, 255)};
+
+    Widgets::Button::render(deleteButton);
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    ButtonConfig saveButton{
+        .id = "##save",
+        .label = "Save",
+        .icon = std::nullopt,
+        .size = ImVec2(sidebarWidth / 2 - 15, 0),
+        .padding = Config::Button::SPACING,
+        .onClick = []()
+        {
+            std::cout << "wololo" << std::endl;
+        },
+        .iconSolid = false,
+        .backgroundColor = RGBAToImVec4(26, 95, 180, 255),
+        .hoverColor = RGBAToImVec4(53, 132, 228, 255),
+        .activeColor = RGBAToImVec4(26, 95, 180, 255)};
+
+    ButtonConfig saveAsNewButton{
+        .id = "##saveasnew",
+        .label = "Save as New",
+        .icon = std::nullopt,
+        .size = ImVec2(sidebarWidth / 2 - 15, 0),
+        .padding = Config::Button::SPACING,
+        .onClick = []()
+        {
+            std::cout << "welele" << std::endl;
+        }};
+
+    std::vector<ButtonConfig> assistantButtons = {saveButton, saveAsNewButton};
+
+    float buttonPosX = 9;
+    float buttonPosY = ImGui::GetCursorPosY();
+
+    Widgets::Button::renderGroup(
+        assistantButtons,
+        buttonPosX,
+        buttonPosY,
+        10);
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+}
+
 /**
  * @brief Renders the sidebar window on the right side of the main application window.
  */
 void ModelSettings::render(float &sidebarWidth)
 {
     // Access ImGui IO for display size
-    ImGuiIO& io = ImGui::GetIO();
+    ImGuiIO &io = ImGui::GetIO();
 
     // Define sidebar dimensions based on the current sidebarWidth
     const float sidebarHeight = io.DisplaySize.y; // Full height of the window
@@ -1050,6 +1275,7 @@ void ModelSettings::render(float &sidebarWidth)
     ImGuiWindowFlags sidebarFlags = ImGuiWindowFlags_NoMove |
                                     ImGuiWindowFlags_NoCollapse |
                                     ImGuiWindowFlags_NoTitleBar |
+                                    ImGuiWindowFlags_NoBackground |
                                     ImGuiWindowFlags_NoScrollbar;
 
     // Begin the sidebar window
@@ -1059,87 +1285,47 @@ void ModelSettings::render(float &sidebarWidth)
     ImVec2 currentSize = ImGui::GetWindowSize();
     sidebarWidth = currentSize.x;
 
+    // holding model presets
+    static std::vector<ModelPreset> modelPresets = {
+        {"Davinci", "The Da Vinci model is the most capable model available today. It can write on any topic in any style, and it is the most human-like of all models. It is also the most expensive model to use.", 0.7F, 0.9F, 50.0F, 42, 2048.0F},
+        {"Curie", "The Curie model is a versatile model that can write on any topic in any style. It is more affordable than the Da Vinci model and is a great choice for most use cases.", 0.7F, 0.9F, 50.0F, 0, 2048.0F},
+        {"Babbage", "The Babbage model is a budget-friendly model that can write on any topic in any style. It is the most affordable model available and is a great choice for basic use cases.", 0.7F, 0.9F, 50.0F, 42, 2048.0F}};
+    static int selectedPreset = 0;
+
     // Optional: Set a distinct background color for the sidebar
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 
-    // Sidebar Content Starts Here
-    ImGui::Spacing();
+    // Render the model presets selection
+    ModelSettings::renderModelPresetsSelection(modelPresets, selectedPreset, sidebarWidth);
 
-    // System Prompt
-    Widgets::Label::render({
-        .label = "System Prompt",
-        .icon = ICON_FA_COG,
-        .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
-        .isBold = true
-    });
-    ImGui::Spacing();
-    ImGui::Spacing();
+    ImGui::Separator();
 
-    static char systemPrompt[1024] = "Hello, how can I help you today?";
-    static bool focusSystemPrompt = true;
-    ImVec2 inputSize = ImVec2(sidebarWidth - 20, 100); // Sidebar width minus padding
+    ModelSettings::renderSamplingSettings(modelPresets[selectedPreset], sidebarWidth);
 
-    Widgets::InputField::render(
-        "##systemprompt", systemPrompt, inputSize,
-        "Enter your system prompt here...", // Placeholder text
-        ImGuiInputTextFlags_EnterReturnsTrue,
-        [](const std::string &input) {
-            // TODO: Handle system prompt submission logic here
-        }, focusSystemPrompt
-    );
+    ImGui::Separator();
 
     ImGui::Spacing();
     ImGui::Spacing();
 
-    Widgets::Label::render({
-        .label = "Model Configuration",
-        .icon = ICON_FA_SLIDERS_H,
-        .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
-        .isBold = true
-    });
+    // export as json button
+    ButtonConfig exportButton{
+        .id = "##export",
+        .label = "Export as JSON",
+        .icon = std::nullopt,
+        .size = ImVec2(sidebarWidth - 20, 0),
+        .padding = Config::Button::SPACING,
+        .onClick = []()
+        {
+            std::cout << "Exporting model settings as JSON" << std::endl;
+        },
+        .iconSolid = false,
+        .backgroundColor = Config::Color::SECONDARY,
+        .hoverColor = Config::Color::PRIMARY,
+        .activeColor = Config::Color::SECONDARY};
+    Widgets::Button::render(exportButton);
 
     ImGui::Spacing();
     ImGui::Spacing();
-
-    ImGui::BeginChild("ScrollableRegion", ImVec2(0, 400), false, ImGuiWindowFlags_NoScrollbar);
-
-    static float temperature = 0.7f;
-    Widgets::Slider::render("##temperature", temperature, 0.0f, 1.0f, sidebarWidth - 30);
-
-    static float top_p = 0.7f;
-    Widgets::Slider::render("##top_p", top_p, 0.0f, 1.0f, sidebarWidth - 30);
-
-    static float top_k = 0.7f;
-    Widgets::Slider::render("##top_k", top_k, 0.0f, 1.0f, sidebarWidth - 30);
-    
-    static float min_length = 32.0f;
-    Widgets::Slider::render("##min_length", min_length, 0.0f, 4096.0f, sidebarWidth - 30, "%.0f");
-
-    static float max_new_tokens = 128.0f;
-    Widgets::Slider::render("##max_new_tokens", max_new_tokens, 0.0f, 4096.0f, sidebarWidth - 30, "%.0f");
-
-    static int random_seed = 42;
-    Widgets::IntInputField::render("##random_seed", random_seed, sidebarWidth - 30);
-
-    ImGui::EndChild();
-
-    // Calculate position for "Information" section at the bottom
-    float remainingSpace = ImGui::GetContentRegionAvail().y - 125.0f; // Adjust for "Information" section height
-
-    // Move cursor position to the calculated bottom edge for "Information"
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + remainingSpace);
-
-    // Example Content: Additional Information
-    if (ImGui::CollapsingHeader("Information", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::Text("Model Information");
-        ImGui::Separator();
-        ImGui::Text("Model Name: Chatbot v1.0");
-        ImGui::Text("Model Type: Rule-based");
-        ImGui::Text("Model Version: 1.0.0");
-    }
-    
-    // Sidebar Content Ends Here
 
     // Restore the previous style color
     ImGui::PopStyleColor();

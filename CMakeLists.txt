@@ -56,6 +56,7 @@ target_include_directories(kolosal_lib PUBLIC
     ${OPENGL_INCLUDE_DIR}
     external/glad/include
     external/icons
+    external/nlohmann
 )
 
 # Link libraries to Kolosal library
@@ -102,6 +103,7 @@ target_include_directories(KolosalDesktop PRIVATE
     ${OPENGL_INCLUDE_DIR}
     external/glad/include
     external/icons
+    external/nlohmann
 )
 
 # Link the Kolosal library and MD4C to the main executable
