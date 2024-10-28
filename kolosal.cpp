@@ -1096,7 +1096,6 @@ void Widgets::InputField::renderMultiline(
 
         // Get the input field's bounding box
         ImVec2 inputMin = ImGui::GetItemRectMin();
-        ImVec2 inputMax = ImGui::GetItemRectMax();
 
         // Calculate the position for the placeholder text
         ImVec2 placeholderPos = ImVec2(inputMin.x + Config::FRAME_PADDING_X, inputMin.y + Config::FRAME_PADDING_Y);
