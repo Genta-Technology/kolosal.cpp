@@ -6,9 +6,12 @@
 #include <array>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <fstream>
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_internal.h"
+
+using json = nlohmann::json;
 
 //-----------------------------------------------------------------------------
 // [SECTION] Constants and Configurations
@@ -33,6 +36,13 @@ MarkdownFonts g_mdFonts;
 
 // Define global instance of IconFonts
 IconFonts g_iconFonts;
+
+// Define global instance of PresetManager
+std::unique_ptr<PresetManager> g_presetManager;
+// idk if this is the right way to do it
+// but it's the only way I can think of
+bool ModelSettings::State::g_showSaveAsDialog = false;
+char ModelSettings::State::g_newPresetName[256] = "";
 
 //-----------------------------------------------------------------------------
 // [SECTION] Message Class Implementations
@@ -134,6 +144,366 @@ void ChatBot::processUserInput(const std::string &input)
 auto ChatBot::getChatHistory() const -> const ChatHistory &
 {
     return chatHistory;
+}
+
+//-----------------------------------------------------------------------------
+// [SECTION] PresetManager Class Implementations
+//-----------------------------------------------------------------------------
+
+/**
+ * @brief Constructs a new PresetManager object.
+ *
+ * @param presetsDirectory The directory where presets are stored.
+ */
+PresetManager::PresetManager(const std::string &presetsDirectory)
+    : presetsPath(presetsDirectory), currentPresetIndex(0), hasInitialized(false)
+{
+    createPresetsDirectoryIfNotExists();
+    initializeDefaultPreset();
+}
+
+/**
+ * @brief Creates the presets directory if it does not exist.
+ */
+void PresetManager::createPresetsDirectoryIfNotExists()
+{
+    try
+    {
+        std::cout << "Presets directory: " << presetsPath << std::endl;
+        if (!std::filesystem::exists(presetsPath))
+        {
+            std::filesystem::create_directories(presetsPath);
+        }
+        // Test file write permissions
+        std::string testPath = presetsPath + "/test.txt";
+        std::ofstream test(testPath);
+        if (!test.is_open())
+        {
+            std::cerr << "Cannot write to presets directory" << std::endl;
+        }
+        else
+        {
+            test.close();
+            std::filesystem::remove(testPath);
+        }
+    }
+    catch (const std::filesystem::filesystem_error &e)
+    {
+        std::cerr << "Error with presets directory: " << e.what() << std::endl;
+        throw;
+    }
+}
+
+/**
+ * @brief Initializes the default preset.
+ */
+void PresetManager::initializeDefaultPreset()
+{
+    defaultPreset = ModelPreset(
+        "Untitled",
+        "You are a helpful assistant.",
+        0.7f,
+        0.9f,
+        50.0f,
+        42,
+        0.0f,
+        2048.0f);
+}
+
+/**
+ * @brief Gets the default presets.
+ *
+ * @return std::vector<ModelPreset> A vector containing the default preset.
+ */
+auto PresetManager::getDefaultPresets() const -> std::vector<ModelPreset>
+{
+    return {defaultPreset};
+}
+
+/**
+ * @brief Loads the presets from disk.
+ *
+ * @return bool True if the presets are successfully loaded, false otherwise.
+ */
+auto PresetManager::loadPresets() -> bool
+{
+    createPresetsDirectoryIfNotExists();
+
+    loadedPresets.clear();
+    originalPresets.clear();
+
+    try
+    {
+        // First, check if we have any existing preset files
+        bool foundPresets = false;
+        for (const auto &entry : std::filesystem::directory_iterator(presetsPath))
+        {
+            if (entry.path().extension() == ".json")
+            {
+                std::ifstream file(entry.path());
+                if (file.is_open())
+                {
+                    try
+                    {
+                        json j;
+                        file >> j;
+                        ModelPreset preset = j.get<ModelPreset>();
+                        loadedPresets.push_back(preset);
+                        originalPresets.push_back(preset);
+                        foundPresets = true;
+                    }
+                    catch (const json::exception &e)
+                    {
+                        std::cerr << "Error parsing preset file " << entry.path()
+                                  << ": " << e.what() << std::endl;
+                    }
+                }
+            }
+        }
+
+        // Only load default presets if no presets exist and we haven't initialized yet
+        if (!foundPresets && !hasInitialized)
+        {
+            loadedPresets = getDefaultPresets();
+            originalPresets = loadedPresets;
+            saveDefaultPresets();
+        }
+
+        currentPresetIndex = loadedPresets.empty() ? -1 : 0;
+        return true;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Error loading presets: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+/**
+ * @brief Saves a preset to disk.
+ *
+ * @param preset The preset to save.
+ * @param createNewFile True to create a new file, false to overwrite an existing file.
+ * @return bool True if the preset is successfully saved, false otherwise.
+ */
+auto PresetManager::savePreset(const ModelPreset &preset, bool createNewFile) -> bool
+{
+    if (!isValidPresetName(preset.name))
+    {
+        std::cerr << "Invalid preset name: " << preset.name << std::endl;
+        return false;
+    }
+
+    try
+    {
+        std::string fileName = preset.name;
+        if (createNewFile)
+        {
+            // Find unique name if necessary
+            int counter = 1;
+            std::string baseName = fileName;
+            while (std::filesystem::exists(getPresetFilePath(fileName)))
+            {
+                fileName = baseName + "_" + std::to_string(counter++);
+            }
+        }
+
+        json j = preset;
+        std::ofstream file(getPresetFilePath(fileName));
+        if (!file.is_open())
+        {
+            std::cerr << "Could not open file for writing: " << fileName << std::endl;
+            return false;
+        }
+
+        file << j.dump(4);
+
+        // Update original preset state after successful save
+        if (!createNewFile)
+        {
+            for (size_t i = 0; i < loadedPresets.size(); ++i)
+            {
+                if (loadedPresets[i].name == preset.name)
+                {
+                    originalPresets[i] = preset;
+                    break;
+                }
+            }
+        }
+
+        return true;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Error saving preset: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+/**
+ * @brief Deletes a preset from disk.
+ *
+ * @param presetName The name of the preset to delete.
+ * @return bool True if the preset is successfully deleted, false otherwise.
+ */
+auto PresetManager::deletePreset(const std::string &presetName) -> bool
+{
+    try
+    {
+        std::string filePath = getPresetFilePath(presetName);
+
+        // Remove from vectors first
+        auto it = std::find_if(loadedPresets.begin(), loadedPresets.end(),
+                               [&presetName](const ModelPreset &p)
+                               { return p.name == presetName; });
+
+        if (it != loadedPresets.end())
+        {
+            size_t index = std::distance(loadedPresets.begin(), it);
+            loadedPresets.erase(it);
+            originalPresets.erase(originalPresets.begin() + index);
+
+            // Adjust current index if necessary
+            if (currentPresetIndex >= static_cast<int>(loadedPresets.size()))
+            {
+                currentPresetIndex = loadedPresets.empty() ? -1 : loadedPresets.size() - 1;
+            }
+        }
+
+        // Try to delete the file if it exists
+        if (std::filesystem::exists(filePath))
+        {
+            if (!std::filesystem::remove(filePath))
+            {
+                std::cerr << "Failed to delete preset file: " << filePath << std::endl;
+                return false;
+            }
+        }
+
+        return true;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Error deleting preset: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+/**
+ * @brief Sets the current preset index.
+ *
+ * @param index The index of the preset to set as current.
+ */
+void PresetManager::setCurrentPresetIndex(int index)
+{
+    if (index >= 0 && index < static_cast<int>(loadedPresets.size()))
+    {
+        currentPresetIndex = index;
+    }
+}
+
+/**
+ * @brief Switches the current preset to the one at the specified index.
+ *
+ * @param newIndex The index of the preset to switch to.
+ */
+void PresetManager::switchPreset(int newIndex)
+{
+    if (newIndex < 0 || newIndex >= static_cast<int>(loadedPresets.size()))
+    {
+        return;
+    }
+
+    // Reset current preset if there are unsaved changes
+    if (hasUnsavedChanges())
+    {
+        resetCurrentPreset();
+    }
+
+    currentPresetIndex = newIndex;
+}
+
+/**
+ * @brief Checks if the current preset has unsaved changes.
+ *
+ * @return bool True if the current preset has unsaved changes, false otherwise.
+ */
+auto PresetManager::hasUnsavedChanges() const -> bool
+{
+    if (currentPresetIndex >= loadedPresets.size() ||
+        currentPresetIndex >= originalPresets.size())
+    {
+        return false;
+    }
+
+    const ModelPreset &current = loadedPresets[currentPresetIndex];
+    const ModelPreset &original = originalPresets[currentPresetIndex];
+
+    return current.name != original.name ||
+           current.systemPrompt != original.systemPrompt ||
+           current.temperature != original.temperature ||
+           current.top_p != original.top_p ||
+           current.top_k != original.top_k ||
+           current.random_seed != original.random_seed ||
+           current.min_length != original.min_length ||
+           current.max_new_tokens != original.max_new_tokens;
+}
+
+/**
+ * @brief Resets the current preset to its original state.
+ */
+void PresetManager::resetCurrentPreset()
+{
+    if (currentPresetIndex < originalPresets.size())
+    {
+        loadedPresets[currentPresetIndex] = originalPresets[currentPresetIndex];
+    }
+}
+
+/**
+ * @brief Gets the path to the preset file with the specified name.
+ *
+ * @param presetName The name of the preset.
+ * @return std::string The path to the preset file.
+ */
+auto PresetManager::getPresetFilePath(const std::string &presetName) const -> std::string
+{
+    return (std::filesystem::path(presetsPath) / (presetName + ".json")).string();
+}
+
+/**
+ * @brief Checks if a preset name is valid.
+ *
+ * @param name The name of the preset.
+ * @return bool True if the preset name is valid, false otherwise.
+ */
+auto PresetManager::isValidPresetName(const std::string &name) const -> bool
+{
+    if (name.empty() || name.length() > 255)
+    {
+        return false;
+    }
+
+    // Check for invalid filesystem characters
+    const std::string invalidChars = R"(<>:"/\|?*)";
+    return name.find_first_of(invalidChars) == std::string::npos;
+}
+
+/**
+ * @brief Saves the default presets to disk.
+ */
+void PresetManager::saveDefaultPresets()
+{
+    // Only save default presets if no presets exist and we haven't initialized yet
+    if (!hasInitialized)
+    {
+        auto defaults = getDefaultPresets();
+        for (const auto &preset : defaults)
+        {
+            savePreset(preset, true);
+        }
+        hasInitialized = true;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -304,6 +674,13 @@ void mainLoop(GLFWwindow *window)
     // Initialize sidebar width with a default value from the configuration
     float sidebarWidth = Config::ModelSettings::SIDEBAR_WIDTH;
 
+    // load presets
+    g_presetManager = std::make_unique<PresetManager>(PRESETS_DIRECTORY);
+    if (!g_presetManager->loadPresets())
+    {
+        std::cerr << "Failed to load presets" << std::endl;
+    }
+
     while (glfwWindowShouldClose(window) == GLFW_FALSE)
     {
         glfwPollEvents();
@@ -370,6 +747,43 @@ auto RGBAToImVec4(float r, float g, float b, float a) -> ImVec4
     return ImVec4(r / 255, g / 255, b / 255, a / 255);
 }
 
+/**
+ * @brief Serializes a ModelPreset object to JSON.
+ *
+ * @param j The JSON object to serialize to.
+ * @param p The ModelPreset object to serialize.
+ */
+void to_json(json &j, const ModelPreset &p)
+{
+    j = json{
+        {"name", p.name},
+        {"systemPrompt", p.systemPrompt},
+        {"temperature", p.temperature},
+        {"top_p", p.top_p},
+        {"top_k", p.top_k},
+        {"random_seed", p.random_seed},
+        {"min_length", p.min_length},
+        {"max_new_tokens", p.max_new_tokens}};
+}
+
+/**
+ * @brief Deserializes a JSON object to a ModelPreset object.
+ *
+ * @param j The JSON object to deserialize.
+ * @param p The ModelPreset object to populate.
+ */
+void from_json(const json &j, ModelPreset &p)
+{
+    j.at("name").get_to(p.name);
+    j.at("systemPrompt").get_to(p.systemPrompt);
+    j.at("temperature").get_to(p.temperature);
+    j.at("top_p").get_to(p.top_p);
+    j.at("top_k").get_to(p.top_k);
+    j.at("random_seed").get_to(p.random_seed);
+    j.at("min_length").get_to(p.min_length);
+    j.at("max_new_tokens").get_to(p.max_new_tokens);
+}
+
 //-----------------------------------------------------------------------------
 // [SECTION] Custom UI Functions
 //-----------------------------------------------------------------------------
@@ -384,6 +798,8 @@ void Widgets::Button::render(const ButtonConfig &config)
     std::string buttonText;
     bool hasIcon = config.icon.has_value() && !config.icon->empty();
     bool hasLabel = config.label.has_value();
+
+    // TODO: Implement button state handling (disabled, active, etc.)
 
     ImGui::PushStyleColor(ImGuiCol_Button, config.backgroundColor.value());
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, config.hoverColor.value());
@@ -473,6 +889,11 @@ void Widgets::Button::renderGroup(const std::vector<ButtonConfig> &buttons, floa
     }
 }
 
+/**
+ * @brief Renders a label with the specified configuration.
+ *
+ * @param config The configuration for the label.
+ */
 void Widgets::Label::render(const LabelConfig &config)
 {
     bool hasIcon = !config.icon.value().empty();
@@ -515,6 +936,17 @@ void Widgets::Label::render(const LabelConfig &config)
     ImGui::PopFont();
 }
 
+/**
+ * @brief Renders an input field with the specified configuration.
+ *
+ * @param label The label for the input field.
+ * @param inputTextBuffer The buffer to store the input text.
+ * @param inputSize The size of the input field.
+ * @param placeholderText The placeholder text for the input field.
+ * @param inputFlags The ImGui input text flags.
+ * @param processInput The function to process the input text.
+ * @param focusInputField The flag to focus the input field.
+ */
 void Widgets::InputField::setStyle(float frameRounding, const ImVec2 &framePadding, const ImVec4 &bgColor)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, frameRounding);
@@ -522,12 +954,23 @@ void Widgets::InputField::setStyle(float frameRounding, const ImVec2 &framePaddi
     ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
 }
 
+/**
+ * @brief Restores the default style for the input field.
+ */
 void Widgets::InputField::restoreStyle()
 {
     ImGui::PopStyleColor(1); // Restore FrameBg
     ImGui::PopStyleVar(2);   // Restore frame rounding and padding
 }
 
+/**
+ * @brief Handles the submission of input text.
+ *
+ * @param inputText The input text buffer.
+ * @param focusInputField The flag to focus the input field.
+ * @param processInput The function to process the input text.
+ * @param clearInput The flag to clear the input text after submission.
+ */
 void Widgets::InputField::handleSubmission(char *inputText, bool &focusInputField, const std::function<void(const std::string &)> &processInput, bool clearInput)
 {
     std::string inputStr(inputText);
@@ -546,6 +989,18 @@ void Widgets::InputField::handleSubmission(char *inputText, bool &focusInputFiel
     focusInputField = true;
 }
 
+/**
+ * @brief Renders a slider with the specified configuration.
+ *
+ * @param label The label for the slider.
+ * @param value The value of the slider.
+ * @param minValue The minimum value of the slider.
+ * @param maxValue The maximum value of the slider.
+ * @param sliderWidth The width of the slider.
+ * @param format The format string for the slider value.
+ * @param paddingX The horizontal padding for the slider.
+ * @param inputWidth The width of the input field.
+ */
 void Widgets::InputField::render(
     const char *label, char *inputTextBuffer, const ImVec2 &inputSize,
     const std::string &placeholderText, ImGuiInputTextFlags inputFlags,
@@ -611,6 +1066,18 @@ void Widgets::InputField::render(
     Widgets::InputField::restoreStyle();
 }
 
+/**
+ * @brief Renders a slider with the specified configuration.
+ *
+ * @param label The label for the slider.
+ * @param value The value of the slider.
+ * @param minValue The minimum value of the slider.
+ * @param maxValue The maximum value of the slider.
+ * @param sliderWidth The width of the slider.
+ * @param format The format string for the slider value.
+ * @param paddingX The horizontal padding for the slider.
+ * @param inputWidth The width of the input field.
+ */
 void Widgets::Slider::render(const char *label, float &value, float minValue, float maxValue, const float sliderWidth, const char *format, const float paddingX, const float inputWidth)
 {
     // Get the render label by stripping ## from the label and replacing _ with space
@@ -692,6 +1159,14 @@ void Widgets::Slider::render(const char *label, float &value, float minValue, fl
     ImGui::PopStyleColor(6); // Reset all custom colors
 }
 
+/**
+ * @brief Renders an integer input field with the specified configuration.
+ *
+ * @param label The label for the input field.
+ * @param value The value of the input field.
+ * @param inputWidth The width of the input field.
+ * @param paddingX The horizontal padding for the input field.
+ */
 void Widgets::IntInputField::render(const char *label, int &value, const float inputWidth, const float paddingX)
 {
     // Get the render label by stripping ## from the label and replacing _ with space
@@ -727,6 +1202,16 @@ void Widgets::IntInputField::render(const char *label, int &value, const float i
     ImGui::PopStyleColor(3);
 }
 
+/**
+ * @brief Renders a combo box with the specified configuration.
+ *
+ * @param label The label for the combo box.
+ * @param items The array of items to display in the combo box.
+ * @param itemsCount The number of items in the array.
+ * @param selectedItem The index of the selected item.
+ * @param width The width of the combo box.
+ * @return bool True if the selected item has changed, false otherwise.
+ */
 auto Widgets::ComboBox::render(const char *label, const char **items, int itemsCount, int &selectedItem, float width) -> bool
 {
     // Push style variables for rounded corners
@@ -1103,7 +1588,12 @@ void ChatWindow::renderInputField(float inputHeight, float inputWidth)
 // [SECTION] Model Settings Rendering Functions
 //-----------------------------------------------------------------------------
 
-void ModelSettings::renderSamplingSettings(ModelPreset &preset, const float sidebarWidth)
+/**
+ * @brief Renders the model settings sidebar with the specified width.
+ *
+ * @param sidebarWidth The width of the sidebar.
+ */
+void ModelSettings::renderSamplingSettings(const float sidebarWidth)
 {
     ImGui::Spacing();
     ImGui::Spacing();
@@ -1113,19 +1603,29 @@ void ModelSettings::renderSamplingSettings(ModelPreset &preset, const float side
                             .icon = ICON_FA_COG,
                             .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
                             .isBold = true});
+
     ImGui::Spacing();
     ImGui::Spacing();
 
-    // Input field for system prompt
+    // Get reference to current preset
+    auto &currentPreset = g_presetManager->getCurrentPreset();
+
+    // Ensure the string has enough capacity
+    currentPreset.systemPrompt.reserve(Config::InputField::TEXT_SIZE);
+
+    // System prompt input
     static bool focusSystemPrompt = true;
-    ImVec2 inputSize = ImVec2(sidebarWidth - 20, 100); // Sidebar width minus padding
+    ImVec2 inputSize = ImVec2(sidebarWidth - 20, 100);
+    
+    // Provide a processInput lambda to update the systemPrompt
     Widgets::InputField::render(
-        "##systemprompt", preset.systemPrompt, inputSize,
-        "Enter your system prompt here...", // Placeholder text
-        ImGuiInputTextFlags_EnterReturnsTrue,
-        [](const std::string &input)
-        {
-            // TODO: Handle system prompt submission logic here
+        "##systemprompt",
+        &currentPreset.systemPrompt[0], // Ensure mutable access
+        inputSize,
+        "Enter your system prompt here...",
+        0,
+        [&](const std::string &input) {
+            currentPreset.systemPrompt = input; // Update the string with user input
         },
         focusSystemPrompt);
 
@@ -1141,24 +1641,26 @@ void ModelSettings::renderSamplingSettings(ModelPreset &preset, const float side
     ImGui::Spacing();
     ImGui::Spacing();
 
-    // sampling
-    Widgets::Slider::render("##temperature", preset.temperature, 0.0f, 1.0f, sidebarWidth - 30);
-    Widgets::Slider::render("##top_p", preset.top_p, 0.0f, 1.0f, sidebarWidth - 30);
-    Widgets::Slider::render("##top_k", preset.top_k, 0.0f, 100.0f, sidebarWidth - 30, "%.0f");
-    Widgets::IntInputField::render("##random_seed", preset.random_seed, sidebarWidth - 30);
+    // Sampling settings
+    Widgets::Slider::render("##temperature", currentPreset.temperature, 0.0f, 1.0f, sidebarWidth - 30);
+    Widgets::Slider::render("##top_p", currentPreset.top_p, 0.0f, 1.0f, sidebarWidth - 30);
+    Widgets::Slider::render("##top_k", currentPreset.top_k, 0.0f, 100.0f, sidebarWidth - 30, "%.0f");
+    Widgets::IntInputField::render("##random_seed", currentPreset.random_seed, sidebarWidth - 30);
 
     ImGui::Spacing();
     ImGui::Spacing();
 
-    // generation
-    Widgets::Slider::render("##min_length", preset.min_length, 0.0f, 4096.0f, sidebarWidth - 30, "%.0f");
-    Widgets::Slider::render("##max_new_tokens", preset.max_new_tokens, 0.0f, 4096.0f, sidebarWidth - 30, "%.0f");
-
-    ImGui::Spacing();
-    ImGui::Spacing();
+    // Generation settings
+    Widgets::Slider::render("##min_length", currentPreset.min_length, 0.0f, 4096.0f, sidebarWidth - 30, "%.0f");
+    Widgets::Slider::render("##max_new_tokens", currentPreset.max_new_tokens, 0.0f, 4096.0f, sidebarWidth - 30, "%.0f");
 }
 
-void ModelSettings::renderModelPresetsSelection(std::vector<ModelPreset> &presets, int &selectedPreset, const float sidebarWidth)
+/**
+ * @brief Renders the model settings sidebar with the specified width.
+ *
+ * @param sidebarWidth The width of the sidebar.
+ */
+void ModelSettings::renderModelPresetsSelection(const float sidebarWidth)
 {
     ImGui::Spacing();
     ImGui::Spacing();
@@ -1172,21 +1674,28 @@ void ModelSettings::renderModelPresetsSelection(std::vector<ModelPreset> &preset
     ImGui::Spacing();
     ImGui::Spacing();
 
-    // Define the model presets as a string array
+    // Get the current presets and create a vector of names
+    const auto &presets = g_presetManager->getPresets();
     std::vector<const char *> presetNames;
     for (const auto &preset : presets)
     {
         presetNames.push_back(preset.name.c_str());
     }
 
+    int currentIndex = g_presetManager->getCurrentPresetIndex();
+
     // Render the ComboBox for model presets
-    float comboBoxWidth = sidebarWidth - 54; // Adjust width to make room for the delete button
-    if (Widgets::ComboBox::render("##modelpresets", presetNames.data(), presetNames.size(), selectedPreset, comboBoxWidth))
+    float comboBoxWidth = sidebarWidth - 54;
+    if (Widgets::ComboBox::render("##modelpresets",
+                                  presetNames.data(),
+                                  presetNames.size(),
+                                  currentIndex,
+                                  comboBoxWidth))
     {
-        // Handle preset selection logic here
+        g_presetManager->switchPreset(currentIndex);
     }
 
-    // Put the delete button beside the ComboBox
+    // Delete button
     ImGui::SameLine();
     ButtonConfig deleteButton{
         .id = "##delete",
@@ -1194,12 +1703,16 @@ void ModelSettings::renderModelPresetsSelection(std::vector<ModelPreset> &preset
         .icon = ICON_FA_TRASH,
         .size = ImVec2(24, 0),
         .padding = Config::Button::SPACING,
-        .onClick = [&presets, &selectedPreset]()
+        .onClick = []()
         {
-            if (selectedPreset >= 0 && selectedPreset < presets.size())
-            {
-                presets.erase(presets.begin() + selectedPreset);
-                selectedPreset = (selectedPreset >= presets.size()) ? presets.size() - 1 : selectedPreset;
+            if (g_presetManager->getPresets().size() > 1)
+            { // Prevent deleting last preset
+                auto &currentPreset = g_presetManager->getCurrentPreset();
+                if (g_presetManager->deletePreset(currentPreset.name))
+                {
+                    // Force reload presets after successful deletion
+                    g_presetManager->loadPresets();
+                }
             }
         },
         .iconSolid = true,
@@ -1207,11 +1720,21 @@ void ModelSettings::renderModelPresetsSelection(std::vector<ModelPreset> &preset
         .hoverColor = RGBAToImVec4(191, 88, 86, 255),
         .activeColor = RGBAToImVec4(165, 29, 45, 255)};
 
+    // Only enable delete button if we have more than one preset
+    if (presets.size() <= 1)
+    {
+        deleteButton.backgroundColor = RGBAToImVec4(128, 128, 128, 128);
+        deleteButton.hoverColor = deleteButton.backgroundColor;
+        deleteButton.activeColor = deleteButton.backgroundColor;
+        deleteButton.onClick = nullptr;
+    }
+
     Widgets::Button::render(deleteButton);
 
     ImGui::Spacing();
     ImGui::Spacing();
 
+    // Save and Save as New buttons
     ButtonConfig saveButton{
         .id = "##save",
         .label = "Save",
@@ -1220,10 +1743,21 @@ void ModelSettings::renderModelPresetsSelection(std::vector<ModelPreset> &preset
         .padding = Config::Button::SPACING,
         .onClick = []()
         {
-            std::cout << "wololo" << std::endl;
+            bool hasChanges = g_presetManager->hasUnsavedChanges();
+            std::cout << "Has unsaved changes: " << (hasChanges ? "true" : "false") << std::endl;
+            if (hasChanges)
+            {
+                auto currentPreset = g_presetManager->getCurrentPreset();
+                bool saved = g_presetManager->savePreset(currentPreset);
+                std::cout << "Save result: " << (saved ? "success" : "failed") << std::endl;
+                if (saved)
+                {
+                    g_presetManager->loadPresets();
+                }
+            }
         },
         .iconSolid = false,
-        .backgroundColor = RGBAToImVec4(26, 95, 180, 255),
+        .backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128),
         .hoverColor = RGBAToImVec4(53, 132, 228, 255),
         .activeColor = RGBAToImVec4(26, 95, 180, 255)};
 
@@ -1235,79 +1769,88 @@ void ModelSettings::renderModelPresetsSelection(std::vector<ModelPreset> &preset
         .padding = Config::Button::SPACING,
         .onClick = []()
         {
-            std::cout << "welele" << std::endl;
+            ModelSettings::State::g_showSaveAsDialog = true;
         }};
 
-    std::vector<ButtonConfig> assistantButtons = {saveButton, saveAsNewButton};
+    std::vector<ButtonConfig> buttons = {saveButton, saveAsNewButton};
+    Widgets::Button::renderGroup(buttons, 9, ImGui::GetCursorPosY(), 10);
 
-    float buttonPosX = 9;
-    float buttonPosY = ImGui::GetCursorPosY();
+    // Save As Dialog
+    if (ModelSettings::State::g_showSaveAsDialog)
+    {
+        ImGui::OpenPopup("Save Preset As");
+        ModelSettings::State::g_showSaveAsDialog = false;
+    }
 
-    Widgets::Button::renderGroup(
-        assistantButtons,
-        buttonPosX,
-        buttonPosY,
-        10);
+    if (ImGui::BeginPopupModal("Save Preset As", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("Enter new preset name:");
+        ImGui::InputText("##newpresetname", ModelSettings::State::g_newPresetName, sizeof(ModelSettings::State::g_newPresetName));
 
-    ImGui::Spacing();
-    ImGui::Spacing();
+        if (ImGui::Button("Save", ImVec2(120, 0)))
+        {
+            if (strlen(ModelSettings::State::g_newPresetName) > 0)
+            {
+                auto currentPreset = g_presetManager->getCurrentPreset();
+                currentPreset.name = ModelSettings::State::g_newPresetName;
+                if (g_presetManager->savePreset(currentPreset, true))
+                {
+                    g_presetManager->loadPresets(); // Reload to include the new preset
+                    ImGui::CloseCurrentPopup();
+                    memset(ModelSettings::State::g_newPresetName, 0, sizeof(ModelSettings::State::g_newPresetName));
+                }
+            }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+            memset(ModelSettings::State::g_newPresetName, 0, sizeof(ModelSettings::State::g_newPresetName));
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 /**
- * @brief Renders the sidebar window on the right side of the main application window.
+ * @brief Renders the model settings sidebar with the specified width.
+ *
+ * @param sidebarWidth The width of the sidebar.
  */
 void ModelSettings::render(float &sidebarWidth)
 {
-    // Access ImGui IO for display size
     ImGuiIO &io = ImGui::GetIO();
+    const float sidebarHeight = io.DisplaySize.y;
 
-    // Define sidebar dimensions based on the current sidebarWidth
-    const float sidebarHeight = io.DisplaySize.y; // Full height of the window
-
-    // Always set the position and size each frame
     ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - sidebarWidth, 0), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(sidebarWidth, sidebarHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowSizeConstraints(
+        ImVec2(Config::ModelSettings::MIN_SIDEBAR_WIDTH, sidebarHeight),
+        ImVec2(Config::ModelSettings::MAX_SIDEBAR_WIDTH, sidebarHeight));
 
-    // Set size constraints for the sidebar
-    ImGui::SetNextWindowSizeConstraints(ImVec2(Config::ModelSettings::MIN_SIDEBAR_WIDTH, sidebarHeight), ImVec2(Config::ModelSettings::MAX_SIDEBAR_WIDTH, sidebarHeight));
-
-    // Define window flags to allow resizing but prevent moving, collapsing, etc.
     ImGuiWindowFlags sidebarFlags = ImGuiWindowFlags_NoMove |
                                     ImGuiWindowFlags_NoCollapse |
                                     ImGuiWindowFlags_NoTitleBar |
                                     ImGuiWindowFlags_NoBackground |
                                     ImGuiWindowFlags_NoScrollbar;
 
-    // Begin the sidebar window
     ImGui::Begin("Model Settings", nullptr, sidebarFlags);
 
-    // Update sidebarWidth based on the window's current size
     ImVec2 currentSize = ImGui::GetWindowSize();
     sidebarWidth = currentSize.x;
 
-    // holding model presets
-    static std::vector<ModelPreset> modelPresets = {
-        {"Davinci", "The Da Vinci model is the most capable model available today. It can write on any topic in any style, and it is the most human-like of all models. It is also the most expensive model to use.", 0.7F, 0.9F, 50.0F, 42, 2048.0F},
-        {"Curie", "The Curie model is a versatile model that can write on any topic in any style. It is more affordable than the Da Vinci model and is a great choice for most use cases.", 0.7F, 0.9F, 50.0F, 0, 2048.0F},
-        {"Babbage", "The Babbage model is a budget-friendly model that can write on any topic in any style. It is the most affordable model available and is a great choice for basic use cases.", 0.7F, 0.9F, 50.0F, 42, 2048.0F}};
-    static int selectedPreset = 0;
-
-    // Optional: Set a distinct background color for the sidebar
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 
-    // Render the model presets selection
-    ModelSettings::renderModelPresetsSelection(modelPresets, selectedPreset, sidebarWidth);
-
+    renderModelPresetsSelection(sidebarWidth);
     ImGui::Separator();
-
-    ModelSettings::renderSamplingSettings(modelPresets[selectedPreset], sidebarWidth);
-
+    renderSamplingSettings(sidebarWidth);
     ImGui::Separator();
 
     ImGui::Spacing();
     ImGui::Spacing();
 
-    // export as json button
+    // Export button
     ButtonConfig exportButton{
         .id = "##export",
         .label = "Export as JSON",
@@ -1316,7 +1859,8 @@ void ModelSettings::render(float &sidebarWidth)
         .padding = Config::Button::SPACING,
         .onClick = []()
         {
-            std::cout << "Exporting model settings as JSON" << std::endl;
+            auto &currentPreset = g_presetManager->getCurrentPreset();
+            g_presetManager->savePreset(currentPreset, true);
         },
         .iconSolid = false,
         .backgroundColor = Config::Color::SECONDARY,
@@ -1324,12 +1868,6 @@ void ModelSettings::render(float &sidebarWidth)
         .activeColor = Config::Color::SECONDARY};
     Widgets::Button::render(exportButton);
 
-    ImGui::Spacing();
-    ImGui::Spacing();
-
-    // Restore the previous style color
     ImGui::PopStyleColor();
-
-    // End the sidebar window
     ImGui::End();
 }

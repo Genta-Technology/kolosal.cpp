@@ -1,5 +1,5 @@
-#ifndef KOLASAL_H
-#define KOLASAL_H
+#ifndef KOLOSAL_H
+#define KOLOSAL_H
 
 #include <string>
 #include <vector>
@@ -9,9 +9,15 @@
 #include <regex>
 #include <array>
 #include <optional>
+#include <filesystem>
 #include "imgui.h"
 #include "IconsFontAwesome5.h"
 #include "IconsFontAwesome5Brands.h"
+#include "json.hpp"
+
+#define PRESETS_DIRECTORY "presets"
+
+using json = nlohmann::json;
 
 //-----------------------------------------------------------------------------
 // [SECTION] Constants and Configurations
@@ -172,8 +178,15 @@ struct ButtonConfig
     std::optional<ImVec4> backgroundColor   = Config::Color::TRANSPARENT;
     std::optional<ImVec4> hoverColor        = Config::Color::SECONDARY;
     std::optional<ImVec4> activeColor       = Config::Color::PRIMARY;
+    bool isEnabled = true;
 };
 
+/**
+ * @brief A struct to store the configuration for a label
+ *
+ * The LabelConfig struct stores the configuration for a label, including the label,
+ * icon, size, icon padding, gap, and whether the label is bold.
+ */
 struct LabelConfig
 {
     std::string id;
@@ -187,27 +200,44 @@ struct LabelConfig
     bool iconSolid;
 };
 
+/**
+ * @brief A struct to store the configuration for a slider
+ *
+ * The SliderConfig struct stores the configuration for a slider, including the label,
+ * value, min, max, and the onChange function.
+ */
 struct ModelPreset
 {
     std::string name;
-
-    // prompt
-    char systemPrompt[8192] = "";
+    std::string systemPrompt;
 
     // sampling
-    float temperature = 0.7F;
-    float top_p = 0.9F;
+    float temperature;
+    float top_p;
     // TODO: Use int instead of float
     // I use float right now because ImGui::SliderFloat requires a float
     // so it needed to create a new custom slider for int
-    float top_k = 50.0F;
-    int random_seed = 0;
+    float top_k;
+    int random_seed;
 
     // generation
     // TODO: Use int instead of float
-    float max_new_tokens = 2048.0F;
+    float max_new_tokens;
     // TODO: Use int instead of float
-    float min_length = 0.0F;
+    float min_length;
+
+    ModelPreset(
+        const std::string& name = "",
+        const std::string& systemPrompt = "",
+        float temperature = 0.7f,
+        float top_p = 0.9f,
+        float top_k = 50.0f,
+        int random_seed = 42,
+        float min_length = 0.0f,
+        float max_new_tokens = 2048.0f
+    ) : name(name), systemPrompt(systemPrompt), temperature(temperature),
+        top_p(top_p), top_k(top_k), random_seed(random_seed),
+        min_length(min_length), max_new_tokens(max_new_tokens) {}
 };
 
 //-----------------------------------------------------------------------------
@@ -225,6 +255,9 @@ extern MarkdownFonts g_mdFonts;
 
 // Global icon fonts
 extern IconFonts g_iconFonts;
+
+// Global presets manager
+extern std::unique_ptr<class PresetManager> g_presetManager;
 
 //-----------------------------------------------------------------------------
 // [SECTION] Classes
@@ -287,6 +320,50 @@ private:
     ChatHistory chatHistory;
 };
 
+/**
+ * @brief A class to manage presets for the model settings
+ *
+ * The PresetManager class is responsible for loading, saving, and deleting model
+ * presets. It also provides functionality to switch between presets and reset
+ * the current preset to the default values.
+ */
+class PresetManager {
+public:
+    explicit PresetManager(const std::string& presetsDirectory);
+    
+    // Core functionality
+    auto loadPresets() -> bool;
+    auto savePreset(const ModelPreset& preset, bool createNewFile = false) -> bool;
+    auto deletePreset(const std::string& presetName) -> bool;
+    void switchPreset(int newIndex);
+    void resetCurrentPreset();
+
+    // Getters and setters
+    auto getPresets() const -> const std::vector<ModelPreset> & { return loadedPresets; }
+    auto getCurrentPreset() const -> const ModelPreset & { return loadedPresets[currentPresetIndex]; }
+    auto getCurrentPreset() -> ModelPreset & { return loadedPresets[currentPresetIndex]; }
+    auto getCurrentPresetIndex() const -> int { return currentPresetIndex; }
+    void setCurrentPresetIndex(int index);
+    auto getDefaultPreset() const -> const ModelPreset & { return defaultPreset; }
+    auto hasUnsavedChanges() const -> bool;
+
+private:
+    std::string presetsPath;
+    std::vector<ModelPreset> loadedPresets;
+    std::vector<ModelPreset> originalPresets;
+    ModelPreset defaultPreset;
+    int currentPresetIndex;
+    bool hasInitialized = false;
+
+    // Helper methods
+    void createPresetsDirectoryIfNotExists();
+    void initializeDefaultPreset();
+    auto getDefaultPresets() const -> std::vector<ModelPreset>;
+    auto getPresetFilePath(const std::string& presetName) const -> std::string;
+    auto isValidPresetName(const std::string& name) const -> bool;
+    void saveDefaultPresets();
+};
+
 //-----------------------------------------------------------------------------
 // [SECTION] Function Prototypes
 //-----------------------------------------------------------------------------
@@ -303,6 +380,8 @@ void cleanup(GLFWwindow *window);
 
 // Utility Functions
 auto RGBAToImVec4(float r, float g, float b, float a) -> ImVec4;
+void to_json(json& j, const ModelPreset& p);
+void from_json(const json& j, ModelPreset& p);
 
 // Custom UI Functions
 namespace Widgets
@@ -366,9 +445,15 @@ namespace ChatWindow
 
 namespace ModelSettings
 {
+    namespace State
+    {
+        extern bool g_showSaveAsDialog;
+        extern char g_newPresetName[256];
+    }
+
     void render(float &sidebarWidth);
-    void renderModelPresetsSelection(std::vector<ModelPreset> &presets, int &selectedPreset, const float sidebarWidth);
-    void renderSamplingSettings(ModelPreset &preset, const float sidebarWidth);
+    void renderModelPresetsSelection(const float sidebarWidth);
+    void renderSamplingSettings(const float sidebarWidth);
 } // namespace ModelSettings
 
-#endif // KOLASAL_H
+#endif // KOLOSAL_H
