@@ -425,7 +425,6 @@ auto PresetManager::deletePreset(const std::string &presetName) -> bool
             {
                 currentPresetIndex = loadedPresets.empty() ? -1 : loadedPresets.size() - 1;
             }
-
             // Reassign incremental IDs
             for (size_t i = 0; i < loadedPresets.size(); ++i)
             {
@@ -734,7 +733,7 @@ void mainLoop(GLFWwindow *window)
 
     // setup NFD
     NFD_Init();
-
+  
     while (glfwWindowShouldClose(window) == GLFW_FALSE)
     {
         glfwPollEvents();
@@ -1773,6 +1772,9 @@ void ModelSettings::renderSamplingSettings(const float sidebarWidth)
     Widgets::Slider::render("##max_new_tokens", currentPreset.max_new_tokens, 0.0f, 4096.0f, sidebarWidth - 30, "%.0f");
 }
 
+/**
+ * @brief Renders the "Save Preset As" dialog for saving a model preset under a new name.
+ */
 void ModelSettings::renderSaveAsDialog()
 {
     if (ModelSettings::State::g_showSaveAsDialog)
