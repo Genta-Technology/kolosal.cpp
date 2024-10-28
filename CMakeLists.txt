@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Enable compile_commands.json generation
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Rest of your CMakeLists.txt remains the same...
 # Set OpenGL preference
 set(OpenGL_GL_PREFERENCE GLVND)
 
@@ -34,6 +33,9 @@ add_subdirectory(external/glfw)
 add_library(glad STATIC external/glad/src/glad.c)
 target_include_directories(glad PUBLIC external/glad/include)
 
+# Add NFD
+add_subdirectory(external/nativefiledialog-extended)
+
 # Add ImGui source files
 set(IMGUI_DIR external/imgui)
 set(IMGUI_SOURCES
@@ -57,6 +59,7 @@ target_include_directories(kolosal_lib PUBLIC
     external/glad/include
     external/icons
     external/nlohmann
+    external/nativefiledialog-extended/src/include  # Corrected path to NFD
 )
 
 # Link libraries to Kolosal library
@@ -64,6 +67,7 @@ target_link_libraries(kolosal_lib PUBLIC
     glfw
     ${OPENGL_LIBRARIES}
     glad
+    nfd  # Make sure to link the NFD library
 )
 
 # Add compile definitions for ImGui
@@ -104,10 +108,13 @@ target_include_directories(KolosalDesktop PRIVATE
     external/glad/include
     external/icons
     external/nlohmann
+    external/nativefiledialog-extended/src/include  # Corrected path for NFD
 )
 
-# Link the Kolosal library and MD4C to the main executable
-target_link_libraries(KolosalDesktop PRIVATE kolosal_lib)
+# Link libraries to the main executable
+target_link_libraries(KolosalDesktop PRIVATE
+    kolosal_lib
+)
 
 # Add custom commands to copy the fonts to the build directory
 add_custom_command(

@@ -10,6 +10,7 @@
 #include <array>
 #include <optional>
 #include <filesystem>
+#include "nfd.h"
 #include "imgui.h"
 #include "IconsFontAwesome5.h"
 #include "IconsFontAwesome5Brands.h"
@@ -73,16 +74,14 @@ namespace Config
         constexpr float RADIUS = 5.0F;
     } // namespace Button
 
-    namespace Style
-    {
-        constexpr float CHILD_ROUNDING = 10.0F;
-        constexpr float FRAME_ROUNDING = 12.0F;
-        constexpr float INPUT_FIELD_BG_COLOR = 0.15F;
-    } // namespace Style
-
     namespace InputField
     {
         constexpr size_t TEXT_SIZE = 1024;
+
+        constexpr float CHILD_ROUNDING = 10.0F;
+        constexpr float FRAME_ROUNDING = 12.0F;
+        
+        constexpr ImVec4 INPUT_FIELD_BG_COLOR = ImVec4(0.15F, 0.15F, 0.15F, 1.0F);
     } // namespace InputField
 
     namespace ModelSettings
@@ -175,9 +174,9 @@ struct ButtonConfig
     float padding;
     std::function<void()> onClick;
     bool iconSolid;
-    std::optional<ImVec4> backgroundColor   = Config::Color::TRANSPARENT;
-    std::optional<ImVec4> hoverColor        = Config::Color::SECONDARY;
-    std::optional<ImVec4> activeColor       = Config::Color::PRIMARY;
+    std::optional<ImVec4> backgroundColor = Config::Color::TRANSPARENT;
+    std::optional<ImVec4> hoverColor = Config::Color::SECONDARY;
+    std::optional<ImVec4> activeColor = Config::Color::PRIMARY;
     bool isEnabled = true;
 };
 
@@ -208,6 +207,9 @@ struct LabelConfig
  */
 struct ModelPreset
 {
+    int id;
+    int lastModified;
+
     std::string name;
     std::string systemPrompt;
 
@@ -227,17 +229,18 @@ struct ModelPreset
     float min_length;
 
     ModelPreset(
-        const std::string& name = "",
-        const std::string& systemPrompt = "",
+        const int id = 0,
+        const int lastModified = 0,
+        const std::string &name = "",
+        const std::string &systemPrompt = "",
         float temperature = 0.7f,
         float top_p = 0.9f,
         float top_k = 50.0f,
         int random_seed = 42,
         float min_length = 0.0f,
-        float max_new_tokens = 2048.0f
-    ) : name(name), systemPrompt(systemPrompt), temperature(temperature),
-        top_p(top_p), top_k(top_k), random_seed(random_seed),
-        min_length(min_length), max_new_tokens(max_new_tokens) {}
+        float max_new_tokens = 2048.0f) : id(id), lastModified(lastModified), name(name), systemPrompt(systemPrompt), temperature(temperature),
+                                          top_p(top_p), top_k(top_k), random_seed(random_seed),
+                                          min_length(min_length), max_new_tokens(max_new_tokens) {}
 };
 
 //-----------------------------------------------------------------------------
@@ -327,14 +330,16 @@ private:
  * presets. It also provides functionality to switch between presets and reset
  * the current preset to the default values.
  */
-class PresetManager {
+class PresetManager
+{
 public:
-    explicit PresetManager(const std::string& presetsDirectory);
-    
+    explicit PresetManager(const std::string &presetsDirectory);
+
     // Core functionality
     auto loadPresets() -> bool;
-    auto savePreset(const ModelPreset& preset, bool createNewFile = false) -> bool;
-    auto deletePreset(const std::string& presetName) -> bool;
+    auto savePreset(const ModelPreset &preset, bool createNewFile = false) -> bool;
+    auto deletePreset(const std::string &presetName) -> bool;
+    auto savePresetToPath(const ModelPreset &preset, const std::string &filePath) -> bool;
     void switchPreset(int newIndex);
     void resetCurrentPreset();
 
@@ -343,7 +348,6 @@ public:
     auto getCurrentPreset() const -> const ModelPreset & { return loadedPresets[currentPresetIndex]; }
     auto getCurrentPreset() -> ModelPreset & { return loadedPresets[currentPresetIndex]; }
     auto getCurrentPresetIndex() const -> int { return currentPresetIndex; }
-    void setCurrentPresetIndex(int index);
     auto getDefaultPreset() const -> const ModelPreset & { return defaultPreset; }
     auto hasUnsavedChanges() const -> bool;
 
@@ -359,8 +363,8 @@ private:
     void createPresetsDirectoryIfNotExists();
     void initializeDefaultPreset();
     auto getDefaultPresets() const -> std::vector<ModelPreset>;
-    auto getPresetFilePath(const std::string& presetName) const -> std::string;
-    auto isValidPresetName(const std::string& name) const -> bool;
+    auto getPresetFilePath(const std::string &presetName) const -> std::string;
+    auto isValidPresetName(const std::string &name) const -> bool;
     void saveDefaultPresets();
 };
 
@@ -380,8 +384,8 @@ void cleanup(GLFWwindow *window);
 
 // Utility Functions
 auto RGBAToImVec4(float r, float g, float b, float a) -> ImVec4;
-void to_json(json& j, const ModelPreset& p);
-void from_json(const json& j, ModelPreset& p);
+void to_json(json &j, const ModelPreset &p);
+void from_json(const json &j, ModelPreset &p);
 
 // Custom UI Functions
 namespace Widgets
@@ -399,9 +403,13 @@ namespace Widgets
 
     namespace InputField
     {
-        void setStyle(float frameRounding, const ImVec2 &framePadding, const ImVec4 &bgColor);
+        void setStyle(float frameRounding, const ImVec2 &framePadding, const ImVec4 &bgColor, const ImVec4 &hoverColor, const ImVec4 &activeColor);
         void restoreStyle();
         void handleSubmission(char *inputText, bool &focusInputField, const std::function<void(const std::string &)> &processInput, bool clearInput);
+        void renderMultiline(
+            const char *label, char *inputTextBuffer, const ImVec2 &inputSize,
+            const std::string &placeholderText, ImGuiInputTextFlags inputFlags,
+            const std::function<void(const std::string &)> &processInput, bool &focusInputField);
         void render(
             const char *label, char *inputTextBuffer, const ImVec2 &inputSize,
             const std::string &placeholderText, ImGuiInputTextFlags inputFlags,
@@ -454,6 +462,7 @@ namespace ModelSettings
     void render(float &sidebarWidth);
     void renderModelPresetsSelection(const float sidebarWidth);
     void renderSamplingSettings(const float sidebarWidth);
+    void renderSaveAsDialog();
 } // namespace ModelSettings
 
 #endif // KOLOSAL_H
