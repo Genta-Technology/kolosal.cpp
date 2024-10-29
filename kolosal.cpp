@@ -1982,6 +1982,57 @@ void ModelSettings::renderModelPresetsSelection(const float sidebarWidth)
 }
 
 /**
+ * @brief Exports the current model presets to a JSON file.
+ */
+void ModelSettings::exportPresets()
+{
+    nfdu8char_t *outPath = nullptr;
+    nfdu8filteritem_t filters[2] = {{"JSON Files", "json"}};
+    const nfdsavedialogu8args_t args{
+        .filterList = filters,
+        .filterCount = 1,
+    };
+    nfdresult_t result = NFD_SaveDialogU8_With(&outPath, &args);
+
+    if (result == NFD_OKAY)
+    {
+        std::filesystem::path savePath(outPath);
+        // Optionally, enforce the .json extension
+        if (savePath.extension() != ".json")
+        {
+            savePath += ".json";
+        }
+
+        // Free the memory allocated by NFD
+        NFD_FreePathU8(outPath);
+
+        // Save the preset to the chosen path
+        bool success = g_presetManager->savePresetsToPath(savePath.string());
+
+        if (success)
+        {
+            std::cout << "Presets saved successfully to: " << savePath << std::endl;
+            // Optionally, display a success message in the UI
+        }
+        else
+        {
+            std::cerr << "Failed to save presets to: " << savePath << std::endl;
+            // Optionally, display an error message in the UI
+        }
+    }
+    else if (result == NFD_CANCEL)
+    {
+        // User canceled the dialog; no action needed
+        std::cout << "Save dialog canceled by the user." << std::endl;
+    }
+    else
+    {
+        // Handle error
+        std::cerr << "Error from NFD: " << NFD_GetError() << std::endl;
+    }
+}
+
+/**
  * @brief Renders the model settings sidebar with the specified width.
  *
  * @param sidebarWidth The width of the sidebar.
@@ -2025,54 +2076,7 @@ void ModelSettings::render(float &sidebarWidth)
         .icon = std::nullopt,
         .size = ImVec2(sidebarWidth - 20, 0),
         .padding = Config::Button::SPACING,
-        .onClick = []()
-        {
-            nfdu8char_t *outPath = nullptr;
-            nfdu8filteritem_t filters[2] = {{"JSON Files", "json"}};
-            const nfdsavedialogu8args_t args{
-                .filterList = filters,
-                .filterCount = 1,
-            };
-            nfdresult_t result = NFD_SaveDialogU8_With(&outPath, &args);
-
-            if (result == NFD_OKAY)
-            {
-                std::filesystem::path savePath(outPath);
-                // Optionally, enforce the .json extension
-                if (savePath.extension() != ".json")
-                {
-                    savePath += ".json";
-                }
-
-                // Free the memory allocated by NFD
-                NFD_FreePathU8(outPath);
-
-                // Save the preset to the chosen path
-                const auto &currentPreset = g_presetManager->getCurrentPreset();
-                bool success = g_presetManager->savePresetToPath(currentPreset, savePath.string());
-
-                if (success)
-                {
-                    std::cout << "Preset saved successfully to: " << savePath << std::endl;
-                    // Optionally, display a success message in the UI
-                }
-                else
-                {
-                    std::cerr << "Failed to save preset to: " << savePath << std::endl;
-                    // Optionally, display an error message in the UI
-                }
-            }
-            else if (result == NFD_CANCEL)
-            {
-                // User canceled the dialog; no action needed
-                std::cout << "Save dialog canceled by the user." << std::endl;
-            }
-            else
-            {
-                // Handle error
-                std::cerr << "Error from NFD: " << NFD_GetError() << std::endl;
-            }
-        },
+        .onClick = ModelSettings::exportPresets,
         .iconSolid = false,
         .backgroundColor = Config::Color::SECONDARY,
         .hoverColor = Config::Color::PRIMARY,

@@ -463,6 +463,7 @@ namespace ModelSettings
     void renderModelPresetsSelection(const float sidebarWidth);
     void renderSamplingSettings(const float sidebarWidth);
     void renderSaveAsDialog();
+    void exportPresets();
 } // namespace ModelSettings
 
 #endif // KOLOSAL_H
