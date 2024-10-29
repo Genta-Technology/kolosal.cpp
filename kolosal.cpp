@@ -219,7 +219,7 @@ void PresetManager::initializeDefaultPreset()
  */
 auto PresetManager::getDefaultPresets() const -> std::vector<ModelPreset>
 {
-    return { defaultPreset };
+    return {defaultPreset};
 }
 
 /**
@@ -271,9 +271,11 @@ auto PresetManager::loadPresets() -> bool
 
         // Sort presets by lastModified
         std::sort(loadedPresets.begin(), loadedPresets.end(),
-                  [](const ModelPreset &a, const ModelPreset &b) { return a.lastModified > b.lastModified; });
+                  [](const ModelPreset &a, const ModelPreset &b)
+                  { return a.lastModified > b.lastModified; });
         std::sort(originalPresets.begin(), originalPresets.end(),
-                  [](const ModelPreset &a, const ModelPreset &b) { return a.lastModified > b.lastModified; });
+                  [](const ModelPreset &a, const ModelPreset &b)
+                  { return a.lastModified > b.lastModified; });
 
         currentPresetIndex = loadedPresets.empty() ? -1 : 0;
         return true;
@@ -348,9 +350,11 @@ auto PresetManager::savePreset(const ModelPreset &preset, bool createNewFile) ->
 
         // Sort presets by lastModified
         std::sort(loadedPresets.begin(), loadedPresets.end(),
-                  [](const ModelPreset &a, const ModelPreset &b) { return a.lastModified > b.lastModified; });
+                  [](const ModelPreset &a, const ModelPreset &b)
+                  { return a.lastModified > b.lastModified; });
         std::sort(originalPresets.begin(), originalPresets.end(),
-                  [](const ModelPreset &a, const ModelPreset &b) { return a.lastModified > b.lastModified; });
+                  [](const ModelPreset &a, const ModelPreset &b)
+                  { return a.lastModified > b.lastModified; });
 
         // Set current preset to the saved preset
         switchPreset(static_cast<int>(loadedPresets.size()) - 1);
@@ -733,7 +737,7 @@ void mainLoop(GLFWwindow *window)
 
     // setup NFD
     NFD_Init();
-  
+
     while (glfwWindowShouldClose(window) == GLFW_FALSE)
     {
         glfwPollEvents();
@@ -1783,7 +1787,7 @@ void ModelSettings::renderSaveAsDialog()
     }
 
     // Change the window title background color
-    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.125F, 0.125F, 0.125F, 1.0F)); // Inactive state color
+    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.125F, 0.125F, 0.125F, 1.0F));       // Inactive state color
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.125F, 0.125F, 0.125F, 1.0F)); // Active state color
 
     // Apply rounded corners to the window
@@ -2007,16 +2011,17 @@ void ModelSettings::exportPresets()
         NFD_FreePathU8(outPath);
 
         // Save the preset to the chosen path
-        bool success = g_presetManager->savePresetsToPath(savePath.string());
+        const auto &currentPreset = g_presetManager->getCurrentPreset();
+        bool success = g_presetManager->savePresetToPath(currentPreset, savePath.string());
 
         if (success)
         {
-            std::cout << "Presets saved successfully to: " << savePath << std::endl;
+            std::cout << "Preset saved successfully to: " << savePath << std::endl;
             // Optionally, display a success message in the UI
         }
         else
         {
-            std::cerr << "Failed to save presets to: " << savePath << std::endl;
+            std::cerr << "Failed to save preset to: " << savePath << std::endl;
             // Optionally, display an error message in the UI
         }
     }
