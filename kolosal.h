@@ -1,3 +1,28 @@
+/*
+ * Copyright (c) 2024, Rifky Bujana Bisri.  All rights reserved.
+ *
+ * This file is part of Genta Technology.
+ * 
+ * Developed by Genta Technology Team.
+ * This product includes software developed by the Genta Technology Team.
+ * (https://genta.tech).
+ * See the COPYRIGHT file at the top-level directory of this distribution
+ * for details of code ownership.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ * 
+ */
+
 #ifndef KOLOSAL_H
 #define KOLOSAL_H
 
@@ -16,6 +41,7 @@
 #include "IconsFontAwesome5Brands.h"
 #include "json.hpp"
 
+#define CHAT_HISTORY_DIRECTORY "chat_history"
 #define PRESETS_DIRECTORY "presets"
 
 using json = nlohmann::json;
@@ -80,11 +106,18 @@ namespace Config
 
         constexpr float CHILD_ROUNDING = 10.0F;
         constexpr float FRAME_ROUNDING = 12.0F;
-        
+
         constexpr ImVec4 INPUT_FIELD_BG_COLOR = ImVec4(0.15F, 0.15F, 0.15F, 1.0F);
     } // namespace InputField
 
-    namespace ModelSettings
+    namespace ChatHistorySidebar
+    {
+        constexpr float SIDEBAR_WIDTH = 150.0F;
+        constexpr float MIN_SIDEBAR_WIDTH = 150.0F;
+        constexpr float MAX_SIDEBAR_WIDTH = 400.0F;
+    } // namespace ChatHistorySidebar
+
+    namespace ModelPresetSidebar
     {
         constexpr float SIDEBAR_WIDTH = 200.0F;
         constexpr float MIN_SIDEBAR_WIDTH = 200.0F;
@@ -96,6 +129,7 @@ namespace Config
         constexpr ImVec4 TRANSPARENT = ImVec4(0.0F, 0.0F, 0.0F, 0.0F);
         constexpr ImVec4 PRIMARY = ImVec4(0.3F, 0.3F, 0.3F, 0.5F);
         constexpr ImVec4 SECONDARY = ImVec4(0.3F, 0.3F, 0.3F, 0.3F);
+        constexpr ImVec4 DISABLED = ImVec4(0.3F, 0.3F, 0.3F, 0.1F);
     } // namespace Color
 
     namespace Slider
@@ -159,6 +193,13 @@ struct IconFonts
     ImFont *brands = nullptr;
 };
 
+enum ButtonState
+{
+    NORMAL,
+    DISABLED,
+    ACTIVE
+};
+
 /**
  * @brief A struct to store the configuration for a button
  *
@@ -173,11 +214,11 @@ struct ButtonConfig
     ImVec2 size;
     float padding;
     std::function<void()> onClick;
-    bool iconSolid;
+    std::optional<bool> iconSolid;
     std::optional<ImVec4> backgroundColor = Config::Color::TRANSPARENT;
     std::optional<ImVec4> hoverColor = Config::Color::SECONDARY;
     std::optional<ImVec4> activeColor = Config::Color::PRIMARY;
-    bool isEnabled = true;
+    std::optional<ButtonState> state = ButtonState::NORMAL;
 };
 
 /**
@@ -200,10 +241,10 @@ struct LabelConfig
 };
 
 /**
- * @brief A struct to store the configuration for a slider
+ * @brief A struct to store each model preset configuration.
  *
- * The SliderConfig struct stores the configuration for a slider, including the label,
- * value, min, max, and the onChange function.
+ * The ModelPreset struct stores the configuration for each model preset, including
+ * the ID, last modified timestamp, name, system prompt, sampling settings, and generation settings.
  */
 struct ModelPreset
 {
@@ -243,6 +284,51 @@ struct ModelPreset
                                           min_length(min_length), max_new_tokens(max_new_tokens) {}
 };
 
+/**
+ * @brief A struct to store each chat message
+ *
+ * The Message struct represents a chat message with the message content, a flag
+ * to indicate whether the message is from the user, and a timestamp.
+ */
+struct Message
+{
+    int id;
+    bool isLiked;
+    bool isDisliked;
+    std::string role;
+    std::string content;
+    std::chrono::system_clock::time_point timestamp;
+
+    Message(
+        int id = 0,
+        const std::string &role = "user",
+        const std::string &content = "",
+        bool isLiked = false,
+        bool isDisliked = false,
+        const std::chrono::system_clock::time_point &timestamp = std::chrono::system_clock::now())
+        : id(id), isLiked(isLiked), isDisliked(isDisliked),
+          role((role == "user" || role == "assistant") ? role : throw std::invalid_argument("Invalid role: " + role)),
+          content(content), timestamp(timestamp) {}
+};
+
+/**
+ * @brief A struct to store the chat history
+ *
+ * The ChatHistory struct represents the chat history with the chat ID, chat name,
+ * and a vector of messages.
+ */
+struct ChatHistory
+{
+    int id;
+    int lastModified;
+    std::string name;
+    std::vector<Message> messages;
+
+    ChatHistory(const int id = 0, const int lastModified = 0, const std::string &name = "untitled",
+                const std::vector<Message> &messages = {})
+        : id(id), lastModified(lastModified), name(name), messages(messages) {}
+};
+
 //-----------------------------------------------------------------------------
 // [SECTION] Forward Declarations and Global Variables
 //-----------------------------------------------------------------------------
@@ -250,16 +336,11 @@ struct ModelPreset
 // Forward declaration of GLFWwindow to avoid including GLFW/glfw3.h
 struct GLFWwindow;
 
-// Global chat bot instance
-extern class ChatBot chatBot;
+// Forward declaration of global variables
 
-// Global markdown fonts
-extern MarkdownFonts g_mdFonts;
-
-// Global icon fonts
-extern IconFonts g_iconFonts;
-
-// Global presets manager
+extern MarkdownFonts                        g_mdFonts;
+extern IconFonts                            g_iconFonts;
+extern std::unique_ptr<class ChatManager>   g_chatManager;
 extern std::unique_ptr<class PresetManager> g_presetManager;
 
 //-----------------------------------------------------------------------------
@@ -267,60 +348,54 @@ extern std::unique_ptr<class PresetManager> g_presetManager;
 //-----------------------------------------------------------------------------
 
 /**
- * @brief A class to represent a chat message
+ * @brief A class to manage the chat history
  *
- * The Message class represents a chat message with the message content, a flag
- * to indicate whether the message is from the user, and a timestamp.
+ * The ChatManager class is responsible for loading, saving, and managing the chat history.
+ * It provides functionality to switch between chats, create new chats, and handle user and assistant messages.
+ * It also provides functionality to export the chat history to a file.
  */
-class Message
+class ChatManager
 {
 public:
-    // Constructors
-    Message(std::string content, bool isUser);
+    ChatManager(const std::string &chatsDirectory);
 
-    // Accessors
-    auto getContent() const -> std::string;
-    auto isUserMessage() const -> bool;
-    auto getTimestamp() const -> std::string;
+    void createChatsDirectoryIfNotExists();
+    void initializeDefaultChatHistory();
+    auto getDefaultChatHistories() const -> std::vector<ChatHistory>;
 
-private:
-    std::string content;
-    bool isUser;
-    std::chrono::system_clock::time_point timestamp;
-};
+    auto loadChats() -> bool;
+    auto saveChat(const ChatHistory &chat, bool createNewFile = false) -> bool;
+    auto saveChatToPath(const ChatHistory &chat, const std::string &filePath) -> bool;
+    auto deleteChat(const std::string &chatName) -> bool;
 
-/**
- * @brief A class to store chat history
- *
- * The ChatHistory class stores a list of Message objects to represent the chat
- * history. It provides a method to add a new message to the chat history.
- * The chat history can be retrieved as a vector of Message objects.
- */
-class ChatHistory
-{
-public:
-    void addMessage(const Message &message);
-    auto getMessages() const -> const std::vector<Message> &;
+    void switchChat(int newIndex);
+    auto hasUnsavedChanges() const -> bool;
+    void resetCurrentChat();
+
+    auto getChatFilePath(const std::string &chatName) const -> std::string;
+    auto isValidChatName(const std::string &name) const -> bool;
+    void saveDefaultChatHistory();
+
+    void handleUserMessage(const std::string &messageContent);
+    void handleAssistantMessage(const std::string &messageContent);
+
+    auto getCurrentChatHistory() const -> ChatHistory;
+    void setCurrentChatHistory(const ChatHistory &chatHistory);
 
 private:
-    std::vector<Message> messages;
-};
+    std::string chatsPath;
+    int currentChatIndex;
+    bool hasInitialized;
+    ChatHistory defaultChatHistory;
+    std::vector<ChatHistory> loadedChats;
+    std::vector<ChatHistory> originalChats;
 
-/**
- * @brief A simple chat bot that echoes user input
- *
- * The ChatBot class processes user input and generates a response by echoing
- * the user's input. The chat history is stored in a ChatHistory object.
- */
-class ChatBot
-{
-public:
-    ChatBot() = default; // Use default constructor
-    void processUserInput(const std::string &input);
-    auto getChatHistory() const -> const ChatHistory &;
+    // Encryption key (hardcoded for now)
+    const std::string encryptionKey = "hardcoded_key";
 
-private:
-    ChatHistory chatHistory;
+    // Encryption and decryption methods
+    auto encryptData(const std::string &data) -> std::string;
+    auto decryptData(const std::string &data) -> std::string;
 };
 
 /**
@@ -338,8 +413,8 @@ public:
     // Core functionality
     auto loadPresets() -> bool;
     auto savePreset(const ModelPreset &preset, bool createNewFile = false) -> bool;
-    auto deletePreset(const std::string &presetName) -> bool;
     auto savePresetToPath(const ModelPreset &preset, const std::string &filePath) -> bool;
+    auto deletePreset(const std::string &presetName) -> bool;
     void switchPreset(int newIndex);
     void resetCurrentPreset();
 
@@ -382,10 +457,34 @@ void setupImGui(GLFWwindow *window);
 void mainLoop(GLFWwindow *window);
 void cleanup(GLFWwindow *window);
 
-// Utility Functions
+//-----------------------------------------------------------------------------
+// [SECTION] Utility Functions
+//-----------------------------------------------------------------------------
+
 auto RGBAToImVec4(float r, float g, float b, float a) -> ImVec4;
+
+auto timePointToString(const std::chrono::system_clock::time_point &tp) -> std::string;
+auto stringToTimePoint(const std::string &str) -> std::chrono::system_clock::time_point;
+
+//-----------------------------------------------------------------------------
+// [SECTION] JSON Serialization and Deserialization Functions
+//-----------------------------------------------------------------------------
+
+// Message Serialization and Deserialization
+void to_json(json &j, const Message &m);
+void from_json(const json &j, Message &m);
+
+// ChatHistory Serialization and Deserialization
+void to_json(json &j, const ChatHistory &c);
+void from_json(const json &j, ChatHistory &c);
+
+// Model Preset Serialization and Deserialization
 void to_json(json &j, const ModelPreset &p);
 void from_json(const json &j, ModelPreset &p);
+
+//-----------------------------------------------------------------------------
+// [SECTION] Custom UI Functions
+//-----------------------------------------------------------------------------
 
 // Custom UI Functions
 namespace Widgets
@@ -433,25 +532,32 @@ namespace Widgets
 
 } // namespace Widgets
 
+namespace ChatHistorySidebar
+{
+    void render(float &sidebarWidth);
+    void renderChatHistoryList(float contentWidth);
+} // namespace ChatHistorySidebar
+
 namespace ChatWindow
 {
-    void render(float inputHeight, float sidebarWidth);
-    void renderChatHistory(const ChatHistory &chatHistory, float contentWidth);
+    void render(float inputHeight, float leftSidebarWidth, float rightSidebarWidth);
+    void renderSidebar(float &sidebarWidth);
+    void renderChatHistory(const ChatHistory chatHistory, float contentWidth);
     void renderInputField(float inputHeight, float inputWidth);
 
     namespace MessageBubble
     {
-        void renderMessage(const Message &msg, int index, float contentWidth);
-        void pushIDAndColors(const Message &msg, int index);
-        auto calculateDimensions(const Message &msg, float windowWidth) -> std::tuple<float, float, float>;
-        void renderMessageContent(const Message &msg, float bubbleWidth, float bubblePadding);
-        void renderTimestamp(const Message &msg, float bubblePadding);
-        void renderButtons(const Message &msg, int index, float bubbleWidth, float bubblePadding);
+        void renderMessage(const Message msg, int index, float contentWidth);
+        void pushIDAndColors(const Message msg, int index);
+        auto calculateDimensions(const Message msg, float windowWidth) -> std::tuple<float, float, float>;
+        void renderMessageContent(const Message msg, float bubbleWidth, float bubblePadding);
+        void renderTimestamp(const Message msg, float bubblePadding);
+        void renderButtons(const Message msg, int index, float bubbleWidth, float bubblePadding);
     } // namespace MessageBubble
 
 } // namespace ChatWindow
 
-namespace ModelSettings
+namespace ModelPresetSidebar
 {
     namespace State
     {
