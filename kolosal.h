@@ -200,6 +200,13 @@ enum ButtonState
     ACTIVE
 };
 
+enum Alignment
+{
+    LEFT,
+    CENTER,
+    RIGHT
+};
+
 /**
  * @brief A struct to store the configuration for a button
  *
@@ -212,13 +219,14 @@ struct ButtonConfig
     std::optional<std::string> label;
     std::optional<std::string> icon;
     ImVec2 size;
-    float padding;
+    std::optional<float> gap = 5.0F;
     std::function<void()> onClick;
     std::optional<bool> iconSolid;
     std::optional<ImVec4> backgroundColor = Config::Color::TRANSPARENT;
     std::optional<ImVec4> hoverColor = Config::Color::SECONDARY;
     std::optional<ImVec4> activeColor = Config::Color::PRIMARY;
     std::optional<ButtonState> state = ButtonState::NORMAL;
+    std::optional<Alignment> alignment = Alignment::CENTER;
 };
 
 /**
@@ -368,6 +376,7 @@ public:
     auto saveChatToPath(const ChatHistory &chat, const std::string &filePath) -> bool;
     auto deleteChat(const std::string &chatName) -> bool;
 
+    void createNewChat();
     void switchChat(int newIndex);
     auto hasUnsavedChanges() const -> bool;
     void resetCurrentChat();
@@ -379,6 +388,7 @@ public:
     void handleUserMessage(const std::string &messageContent);
     void handleAssistantMessage(const std::string &messageContent);
 
+    auto getChatNames() const -> std::vector<std::string>;
     auto getCurrentChatHistory() const -> ChatHistory;
     void setCurrentChatHistory(const ChatHistory &chatHistory);
 
@@ -498,6 +508,7 @@ namespace Widgets
     namespace Label
     {
         void render(const LabelConfig &config);
+        void render(const LabelConfig &config, ImVec2 rectMin, ImVec2 rectMax);
     } // namespace Label
 
     namespace InputField

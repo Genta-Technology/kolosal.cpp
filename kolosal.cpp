@@ -2,25 +2,25 @@
  * Copyright (c) 2024, Rifky Bujana Bisri.  All rights reserved.
  *
  * This file is part of Genta Technology.
- * 
+ *
  * Developed by Genta Technology Team.
  * This product includes software developed by the Genta Technology Team.
  * (https://genta.tech).
  * See the COPYRIGHT file at the top-level directory of this distribution
  * for details of code ownership.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  */
 
 #include "kolosal.h"
@@ -54,10 +54,10 @@ namespace Config
 // [SECTION] Global Variables
 //-----------------------------------------------------------------------------
 
-MarkdownFonts                   g_mdFonts;
-IconFonts                       g_iconFonts;
-std::unique_ptr<ChatManager>    g_chatManager;
-std::unique_ptr<PresetManager>  g_presetManager;
+MarkdownFonts g_mdFonts;
+IconFonts g_iconFonts;
+std::unique_ptr<ChatManager> g_chatManager;
+std::unique_ptr<PresetManager> g_presetManager;
 // idk if this is the right way to do it
 // but it's the only way I can think of
 bool ModelPresetSidebar::State::g_showSaveAsDialog = false;
@@ -226,12 +226,19 @@ auto ChatManager::saveChat(const ChatHistory &chat, bool createNewFile) -> bool
 
         if (createNewFile)
         {
-            // Find a unique name if necessary
-            int counter = 1;
-            std::string baseName = newChat.name;
-            while (std::filesystem::exists(getChatFilePath(newChat.name)))
+            // Ensure the chat name is unique (handled in createNewChat)
+        }
+        else
+        {
+            // Update existing chat in loadedChats and originalChats
+            for (size_t i = 0; i < loadedChats.size(); ++i)
             {
-                newChat.name = baseName + "_" + std::to_string(counter++);
+                if (loadedChats[i].name == newChat.name)
+                {
+                    loadedChats[i] = newChat;
+                    originalChats[i] = newChat;
+                    break;
+                }
             }
         }
 
@@ -247,26 +254,6 @@ auto ChatManager::saveChat(const ChatHistory &chat, bool createNewFile) -> bool
 
         file << encryptedData;
 
-        // Update original chat state after successful save
-        if (!createNewFile)
-        {
-            for (size_t i = 0; i < loadedChats.size(); ++i)
-            {
-                if (loadedChats[i].name == newChat.name)
-                {
-                    loadedChats[i] = newChat;
-                    originalChats[i] = newChat;
-                    break;
-                }
-            }
-        }
-        else
-        {
-            // Add the new chat to the lists
-            loadedChats.push_back(newChat);
-            originalChats.push_back(newChat);
-        }
-
         // Sort chats by lastModified
         std::sort(loadedChats.begin(), loadedChats.end(),
                   [](const ChatHistory &a, const ChatHistory &b)
@@ -275,8 +262,28 @@ auto ChatManager::saveChat(const ChatHistory &chat, bool createNewFile) -> bool
                   [](const ChatHistory &a, const ChatHistory &b)
                   { return a.lastModified > b.lastModified; });
 
-        // Set current chat to the saved chat
-        switchChat(static_cast<int>(loadedChats.size()) - 1);
+        // Reassign IDs after sorting
+        for (size_t i = 0; i < loadedChats.size(); ++i)
+        {
+            loadedChats[i].id = static_cast<int>(i + 1);
+            originalChats[i].id = static_cast<int>(i + 1);
+        }
+
+        // After sorting, find the index of the saved chat
+        auto it = std::find_if(loadedChats.begin(), loadedChats.end(),
+                               [&newChat](const ChatHistory &c)
+                               { return c.name == newChat.name; });
+
+        if (it != loadedChats.end())
+        {
+            int index = static_cast<int>(std::distance(loadedChats.begin(), it));
+            // Set current chat to the saved chat
+            switchChat(index);
+        }
+        else
+        {
+            std::cerr << "Error: saved chat not found in loadedChats after sorting." << std::endl;
+        }
 
         return true;
     }
@@ -383,6 +390,63 @@ auto ChatManager::deleteChat(const std::string &chatName) -> bool
 }
 
 /**
+ * @brief Creates a new chat, switches to it, and places it at the top of the chat list.
+ */
+void ChatManager::createNewChat()
+{
+    try
+    {
+        // Generate a unique base name for the new chat
+        int chatNumber = static_cast<int>(loadedChats.size()) + 1;
+        std::string baseName = "Chat_" + std::to_string(chatNumber);
+        std::string chatName = baseName;
+
+        // Ensure the chat name is unique
+        int counter = 1;
+        while (std::any_of(loadedChats.begin(), loadedChats.end(),
+                           [&chatName](const ChatHistory &chat)
+                           { return chat.name == chatName; }))
+        {
+            chatName = baseName + "_" + std::to_string(counter++);
+        }
+
+        // Create a new ChatHistory object
+        ChatHistory newChat;
+        newChat.id = chatNumber;
+        newChat.name = chatName;
+        newChat.lastModified = static_cast<int>(std::time(nullptr));
+        newChat.messages = {}; // Start with an empty message list
+
+        // Add the new chat to the vectors
+        loadedChats.push_back(newChat);
+        originalChats.push_back(newChat);
+
+        // Save the new chat (creates a new file)
+        saveChat(newChat, true);
+
+        // After saving, the chats are sorted by lastModified in saveChat()
+        // We need to find the index of the new chat after sorting
+        auto it = std::find_if(loadedChats.begin(), loadedChats.end(),
+                               [&newChat](const ChatHistory &chat)
+                               { return chat.name == newChat.name; });
+        if (it != loadedChats.end())
+        {
+            int index = static_cast<int>(std::distance(loadedChats.begin(), it));
+            // Set current chat to the new chat
+            switchChat(index);
+        }
+        else
+        {
+            std::cerr << "Error: New chat not found in loadedChats after sorting." << std::endl;
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Error creating new chat: " << e.what() << std::endl;
+    }
+}
+
+/**
  * @brief Switches the current chat to the one at the specified index.
  *
  * @param newIndex The index of the chat to switch to.
@@ -394,10 +458,10 @@ void ChatManager::switchChat(int newIndex)
         return;
     }
 
-    // Reset current chat if there are unsaved changes
+    // Save current chat if there are unsaved changes
     if (hasUnsavedChanges())
     {
-        resetCurrentChat();
+        saveChat(getCurrentChatHistory(), false);
     }
 
     currentChatIndex = newIndex;
@@ -583,6 +647,21 @@ auto ChatManager::decryptData(const std::string &data) -> std::string
 {
     // XOR decryption is the same as encryption
     return encryptData(data);
+}
+
+/**
+ * @brief Gets the names of all loaded chats.
+ *
+ * @return std::vector<std::string> A vector containing the names of all chats.
+ */
+auto ChatManager::getChatNames() const -> std::vector<std::string>
+{
+    std::vector<std::string> chatNames;
+    for (const auto &chat : loadedChats)
+    {
+        chatNames.push_back(chat.name);
+    }
+    return chatNames;
 }
 
 /**
@@ -1203,7 +1282,7 @@ void mainLoop(GLFWwindow *window)
     float modelPresetSidebarWidth = Config::ModelPresetSidebar::SIDEBAR_WIDTH;
 
     // Initialize the chat manager and preset manager
-    g_chatManager   = std::make_unique<ChatManager>(CHAT_HISTORY_DIRECTORY);
+    g_chatManager = std::make_unique<ChatManager>(CHAT_HISTORY_DIRECTORY);
     g_presetManager = std::make_unique<PresetManager>(PRESETS_DIRECTORY);
 
     // setup NFD
@@ -1461,57 +1540,29 @@ void Widgets::Button::render(const ButtonConfig &config)
     // Set the border radius (rounding) for the button
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Config::Button::RADIUS);
 
-    if (hasIcon)
+    // Render the button with an empty label
+    if (ImGui::Button(config.id.c_str(), config.size) &&
+        config.onClick && currentState != ButtonState::DISABLED && currentState != ButtonState::ACTIVE)
     {
-        if (config.iconSolid.value_or(false))
-        {
-            ImGui::PushFont(g_iconFonts.solid);
-        }
-        else
-        {
-            ImGui::PushFont(g_iconFonts.regular);
-        }
+        config.onClick();
     }
 
-    if (hasIcon && hasLabel)
-    {
-        buttonText = config.icon.value();
-        if (ImGui::Button(buttonText.c_str(), ImVec2(config.size.x / 4, config.size.y)) &&
-            config.onClick && currentState != ButtonState::DISABLED && currentState != ButtonState::ACTIVE)
-        {
-            config.onClick();
-        }
+    // Get the rectangle of the button
+    ImVec2 buttonMin = ImGui::GetItemRectMin();
+    ImVec2 buttonMax = ImGui::GetItemRectMax();
 
-        ImGui::PopFont(); // Pop icon font
-        ImGui::SameLine(0, config.padding);
+    // Prepare the label configuration
+    LabelConfig labelConfig;
+    labelConfig.id = config.id;
+    labelConfig.label = config.label.value_or("");
+    labelConfig.icon = config.icon.value_or("");
+    labelConfig.size = config.size;
+    labelConfig.isBold = false; // Set according to your needs
+    labelConfig.iconSolid = config.iconSolid.value_or(false);
+    labelConfig.gap = config.gap.value();
 
-        // Use regular font for label
-        buttonText = config.label.value();
-        if (ImGui::Button(buttonText.c_str(), ImVec2(3 * config.size.x / 4, config.size.y)) &&
-            config.onClick && currentState != ButtonState::DISABLED && currentState != ButtonState::ACTIVE)
-        {
-            config.onClick();
-        }
-    }
-    else if (hasIcon)
-    {
-        buttonText = config.icon.value();
-        if (ImGui::Button(buttonText.c_str(), config.size) &&
-            config.onClick && currentState != ButtonState::DISABLED && currentState != ButtonState::ACTIVE)
-        {
-            config.onClick();
-        }
-        ImGui::PopFont(); // Pop icon font
-    }
-    else if (hasLabel)
-    {
-        buttonText = config.label.value();
-        if (ImGui::Button(buttonText.c_str(), config.size) &&
-            config.onClick && currentState != ButtonState::DISABLED && currentState != ButtonState::ACTIVE)
-        {
-            config.onClick();
-        }
-    }
+    // Render the label inside the button's rectangle
+    Widgets::Label::render(labelConfig, buttonMin, buttonMax);
 
     // Pop color styles and border radius style
     ImGui::PopStyleColor(3);
@@ -1531,14 +1582,26 @@ void Widgets::Button::renderGroup(const std::vector<ButtonConfig> &buttons, floa
     ImGui::SetCursorPosX(startX);
     ImGui::SetCursorPosY(startY);
 
+    // Calculate total width of all buttons including spacing
+    float totalWidth = 0.0f;
+    for (const auto &button : buttons)
+    {
+        totalWidth += button.size.x;
+    }
+    totalWidth += spacing * (buttons.size() - 1);
+
+    // Position each button and apply spacing
+    float currentX = startX;
     for (size_t i = 0; i < buttons.size(); ++i)
     {
+        // Set cursor position for each button
+        ImGui::SetCursorPos(ImVec2(currentX, startY));
+
+        // Render button
         render(buttons[i]);
 
-        if (i < buttons.size() - 1)
-        {
-            ImGui::SameLine(0.0f, spacing);
-        }
+        // Update position for next button
+        currentX += buttons[i].size.x + spacing;
     }
 }
 
@@ -1587,6 +1650,107 @@ void Widgets::Label::render(const LabelConfig &config)
     ImGui::Text("%s", config.label.c_str());
 
     ImGui::PopFont();
+}
+
+/**
+ * @brief Sets the style for the input field.
+ *
+ * @param config The configuration for the input field.
+ * @param rectMin The minimum position of the rectangle.
+ * @param rectMax The maximum position of the rectangle.
+ *
+ * @see Config::LabelConfig
+ */
+void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 rectMax)
+{
+    bool hasIcon = !config.icon.value().empty();
+    bool hasLabel = !config.label.empty();
+
+    // Compute the size of the rectangle
+    ImVec2 rectSize = ImVec2(rectMax.x - rectMin.x, rectMax.y - rectMin.y);
+
+    // Push a clipping rectangle to constrain rendering within the button
+    ImGui::PushClipRect(rectMin, rectMax, true);
+
+    // Calculate the size of the label text if there is a label
+    ImVec2 labelSize(0, 0);
+    if (hasLabel)
+    {
+        if (config.isBold)
+        {
+            ImGui::PushFont(g_mdFonts.bold);
+        }
+        else
+        {
+            ImGui::PushFont(g_mdFonts.regular);
+        }
+        labelSize = ImGui::CalcTextSize(config.label.c_str());
+        ImGui::PopFont();
+    }
+
+    // Calculate the size of the icon if present
+    ImVec2 iconSize(0, 0);
+    if (hasIcon)
+    {
+        if (config.iconSolid)
+        {
+            ImGui::PushFont(g_iconFonts.solid);
+        }
+        else
+        {
+            ImGui::PushFont(g_iconFonts.regular);
+        }
+        iconSize = ImGui::CalcTextSize(config.icon.value().c_str());
+        ImGui::PopFont();
+    }
+
+    // Calculate total content width and height
+    float contentWidth = hasIcon && hasLabel ? iconSize.x + labelSize.x + config.gap.value() : (hasIcon ? iconSize.x : labelSize.x);
+    float contentHeight = std::max(labelSize.y, iconSize.y);
+
+    // Calculate horizontal and vertical offsets to center content
+    float verticalOffset = rectMin.y + (rectSize.y - contentHeight) / 2.0f;
+    float horizontalOffset = rectMin.x + (rectSize.x - contentWidth) / 2.0f;
+
+    // Set the cursor position to the calculated offsets
+    ImGui::SetCursorScreenPos(ImVec2(horizontalOffset, verticalOffset));
+
+    // Now render the icon and/or label
+    if (hasIcon)
+    {
+        if (config.iconSolid)
+        {
+            ImGui::PushFont(g_iconFonts.solid);
+        }
+        else
+        {
+            ImGui::PushFont(g_iconFonts.regular);
+        }
+
+        ImGui::TextUnformatted(config.icon.value().c_str());
+        ImGui::SameLine(0, config.gap.value() * static_cast<float>(hasLabel)); // Only add gap if label exists
+
+        ImGui::PopFont(); // Pop icon font
+    }
+
+    // Render label text with specified font weight, if it exists
+    if (hasLabel)
+    {
+        if (config.isBold)
+        {
+            ImGui::PushFont(g_mdFonts.bold);
+        }
+        else
+        {
+            ImGui::PushFont(g_mdFonts.regular);
+        }
+
+        ImGui::TextUnformatted(config.label.c_str());
+        ImGui::PopFont();
+    }
+
+    // Pop the clipping rectangle
+    ImGui::PopClipRect();
 }
 
 /**
@@ -2064,7 +2228,6 @@ void ChatWindow::MessageBubble::renderButtons(const Message msg, int index, floa
             .label = std::nullopt,
             .icon = ICON_FA_COPY,
             .size = ImVec2(Config::Button::WIDTH, 0),
-            .padding = Config::Button::SPACING,
             .onClick = [&msg]()
             {
                 ImGui::SetClipboardText(msg.content.c_str());
@@ -2085,7 +2248,6 @@ void ChatWindow::MessageBubble::renderButtons(const Message msg, int index, floa
             .label = std::nullopt,
             .icon = ICON_FA_THUMBS_UP,
             .size = ImVec2(Config::Button::WIDTH, 0),
-            .padding = Config::Button::SPACING,
             .onClick = [index]()
             {
                 std::cout << "Like button clicked for message " << index << std::endl;
@@ -2096,7 +2258,6 @@ void ChatWindow::MessageBubble::renderButtons(const Message msg, int index, floa
             .label = std::nullopt,
             .icon = ICON_FA_THUMBS_DOWN,
             .size = ImVec2(Config::Button::WIDTH, 0),
-            .padding = Config::Button::SPACING,
             .onClick = [index]()
             {
                 std::cout << "Dislike button clicked for message " << index << std::endl;
@@ -2316,6 +2477,19 @@ void ChatHistorySidebar::render(float &sidebarWidth)
     ImVec2 currentSize = ImGui::GetWindowSize();
     sidebarWidth = currentSize.x;
 
+    ButtonConfig createNewChatButtonConfig{
+        .id = "##createNewChat",
+        .label = "New Chat",
+        .icon = ICON_FA_COMMENT_MEDICAL,
+        .size = ImVec2(sidebarWidth - 20, 0),
+        .gap = 10.0F,
+        .onClick = []()
+        {
+            g_chatManager->createNewChat();
+        }};
+
+    Widgets::Button::render(createNewChatButtonConfig);
+
     ImGui::End();
 }
 
@@ -2430,7 +2604,6 @@ void ModelPresetSidebar::renderSaveAsDialog()
             .label = "Save",
             .icon = std::nullopt,
             .size = ImVec2(122.5F, 0),
-            .padding = Config::Button::SPACING,
             .onClick = []()
             {
                 if (strlen(ModelPresetSidebar::State::g_newPresetName) > 0)
@@ -2455,7 +2628,6 @@ void ModelPresetSidebar::renderSaveAsDialog()
             .label = "Cancel",
             .icon = std::nullopt,
             .size = ImVec2(122.5F, 0),
-            .padding = Config::Button::SPACING,
             .onClick = []()
             {
                 ImGui::CloseCurrentPopup();
@@ -2524,7 +2696,6 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
         .label = std::nullopt,
         .icon = ICON_FA_TRASH,
         .size = ImVec2(24, 0),
-        .padding = Config::Button::SPACING,
         .onClick = []()
         {
             if (g_presetManager->getPresets().size() > 1)
@@ -2559,7 +2730,6 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
         .label = "Save",
         .icon = std::nullopt,
         .size = ImVec2(sidebarWidth / 2 - 15, 0),
-        .padding = Config::Button::SPACING,
         .onClick = []()
         {
             bool hasChanges = g_presetManager->hasUnsavedChanges();
@@ -2584,7 +2754,6 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
         .label = "Save as New",
         .icon = std::nullopt,
         .size = ImVec2(sidebarWidth / 2 - 15, 0),
-        .padding = Config::Button::SPACING,
         .onClick = []()
         {
             ModelPresetSidebar::State::g_showSaveAsDialog = true;
@@ -2692,7 +2861,6 @@ void ModelPresetSidebar::render(float &sidebarWidth)
         .label = "Export as JSON",
         .icon = std::nullopt,
         .size = ImVec2(sidebarWidth - 20, 0),
-        .padding = Config::Button::SPACING,
         .onClick = ModelPresetSidebar::exportPresets,
         .iconSolid = false,
         .backgroundColor = Config::Color::SECONDARY,
