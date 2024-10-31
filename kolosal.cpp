@@ -5,7 +5,9 @@
  *
  * Developed by Genta Technology Team.
  * This product includes software developed by the Genta Technology Team.
- * (https://genta.tech).
+ *
+ *     https://genta.tech
+ *
  * See the COPYRIGHT file at the top-level directory of this distribution
  * for details of code ownership.
  *
@@ -20,7 +22,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 #include "kolosal.h"
@@ -121,7 +122,7 @@ void ChatManager::initializeDefaultChatHistory()
     defaultChatHistory = ChatHistory(
         0,
         static_cast<int>(std::time(nullptr)),
-        "default",
+        "untitled",
         {} // Empty messages vector
     );
 }
@@ -398,7 +399,7 @@ void ChatManager::createNewChat()
     {
         // Generate a unique base name for the new chat
         int chatNumber = static_cast<int>(loadedChats.size()) + 1;
-        std::string baseName = "Chat_" + std::to_string(chatNumber);
+        std::string baseName = "Untitled_" + std::to_string(chatNumber);
         std::string chatName = baseName;
 
         // Ensure the chat name is unique
@@ -650,18 +651,31 @@ auto ChatManager::decryptData(const std::string &data) -> std::string
 }
 
 /**
- * @brief Gets the names of all loaded chats.
+ * @brief Gets the chat history at the specified index.
  *
- * @return std::vector<std::string> A vector containing the names of all chats.
+ * @param index The index of the chat history to get.
+ * @return ChatHistory The chat history at the specified index.
  */
-auto ChatManager::getChatNames() const -> std::vector<std::string>
+auto ChatManager::getChatHistory(const int index) const -> ChatHistory
 {
-    std::vector<std::string> chatNames;
-    for (const auto &chat : loadedChats)
+    if (index >= 0 && index < static_cast<int>(loadedChats.size()))
     {
-        chatNames.push_back(chat.name);
+        return loadedChats[index];
     }
-    return chatNames;
+    else
+    {
+        return ChatHistory();
+    }
+}
+
+/**
+ * @brief Gets the number of loaded chat histories.
+ *
+ * @return int The number of loaded chat histories.
+ */
+auto ChatManager::getChatHistoryCount() const -> int
+{
+    return static_cast<int>(loadedChats.size());
 }
 
 /**
@@ -1612,12 +1626,11 @@ void Widgets::Label::render(const LabelConfig &config)
 {
     bool hasIcon = !config.icon.value().empty();
 
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + config.iconPaddingX.value());
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + config.iconPaddingY.value());
+
     if (hasIcon)
     {
-        // Apply padding before rendering the icon
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + config.iconPaddingX.value());
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + config.iconPaddingY.value());
-
         // Select font based on icon style
         if (config.iconSolid.value())
         {
@@ -2514,9 +2527,53 @@ void ChatHistorySidebar::render(float &sidebarWidth)
         .onClick = []()
         {
             g_chatManager->createNewChat();
-        }};
+        },
+        .backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128),
+        .hoverColor = RGBAToImVec4(53, 132, 228, 255),
+        .activeColor = RGBAToImVec4(26, 95, 180, 255)};
 
     Widgets::Button::render(createNewChatButtonConfig);
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    Widgets::Label::render(
+        LabelConfig{.id = "##chathistory",
+                    .label = "Recents",
+                    .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
+                    .iconPaddingX = 10.0F,
+                    .isBold = true});
+
+    ImGui::Spacing();
+
+    const ChatHistory currentChatHistory = g_chatManager->getCurrentChatHistory();
+
+    for (size_t i = 0; i < g_chatManager->getChatHistoryCount(); ++i)
+    {
+        const ChatHistory chat = g_chatManager->getChatHistory(i);
+
+        ButtonConfig chatButtonConfig{
+            .id = "##chat" + std::to_string(i),
+            .label = chat.name,
+            .icon = ICON_FA_COMMENT,
+            .size = ImVec2(sidebarWidth - 20, 0),
+            .gap = 10.0F,
+            .onClick = [i]()
+            {
+                g_chatManager->switchChat(i);
+            },
+            .alignment = Alignment::LEFT};
+
+        if (chat.id == currentChatHistory.id)
+        {
+            chatButtonConfig.state == ButtonState::ACTIVE;
+        }
+
+        Widgets::Button::render(chatButtonConfig);
+    }
 
     ImGui::End();
 }

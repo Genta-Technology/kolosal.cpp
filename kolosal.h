@@ -5,7 +5,9 @@
  * 
  * Developed by Genta Technology Team.
  * This product includes software developed by the Genta Technology Team.
- * (https://genta.tech).
+ * 
+ *     https://genta.tech
+ * 
  * See the COPYRIGHT file at the top-level directory of this distribution
  * for details of code ownership.
  * 
@@ -20,7 +22,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
  */
 
 #ifndef KOLOSAL_H
@@ -389,7 +390,8 @@ public:
     void handleUserMessage(const std::string &messageContent);
     void handleAssistantMessage(const std::string &messageContent);
 
-    auto getChatNames() const -> std::vector<std::string>;
+    auto getChatHistory(const int index) const -> ChatHistory;
+    auto getChatHistoryCount() const -> int;
     auto getCurrentChatHistory() const -> ChatHistory;
     void setCurrentChatHistory(const ChatHistory &chatHistory);
 
