@@ -244,8 +244,9 @@ struct LabelConfig
     std::optional<float> iconPaddingX = 5.0F;
     std::optional<float> iconPaddingY = 5.0F;
     std::optional<float> gap = 5.0F;
-    bool isBold;
-    bool iconSolid;
+    std::optional<bool> isBold = false;
+    std::optional<bool> iconSolid = false;
+    std::optional<Alignment> alignment = Alignment::CENTER;
 };
 
 /**

@@ -1506,10 +1506,7 @@ void from_json(const json &j, ModelPreset &p)
  */
 void Widgets::Button::render(const ButtonConfig &config)
 {
-    std::string buttonText;
-    bool hasIcon = config.icon.has_value() && !config.icon->empty();
-    bool hasLabel = config.label.has_value();
-
+    // Handle button state and styles as before
     ButtonState currentState = config.state.value_or(ButtonState::NORMAL);
 
     switch (currentState)
@@ -1559,12 +1556,13 @@ void Widgets::Button::render(const ButtonConfig &config)
     labelConfig.size = config.size;
     labelConfig.isBold = false; // Set according to your needs
     labelConfig.iconSolid = config.iconSolid.value_or(false);
-    labelConfig.gap = config.gap.value();
+    labelConfig.gap = config.gap.value_or(5.0f);
+    labelConfig.alignment = config.alignment.value_or(Alignment::CENTER);
 
     // Render the label inside the button's rectangle
     Widgets::Label::render(labelConfig, buttonMin, buttonMax);
 
-    // Pop color styles and border radius style
+    // Pop styles
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar(2);
 }
@@ -1621,7 +1619,7 @@ void Widgets::Label::render(const LabelConfig &config)
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + config.iconPaddingY.value());
 
         // Select font based on icon style
-        if (config.iconSolid)
+        if (config.iconSolid.value())
         {
             ImGui::PushFont(g_iconFonts.solid);
         }
@@ -1638,7 +1636,7 @@ void Widgets::Label::render(const LabelConfig &config)
     }
 
     // Render label text with specified font weight
-    if (config.isBold)
+    if (config.isBold.value())
     {
         ImGui::PushFont(g_mdFonts.bold);
     }
@@ -1676,7 +1674,7 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
     ImVec2 labelSize(0, 0);
     if (hasLabel)
     {
-        if (config.isBold)
+        if (config.isBold.value())
         {
             ImGui::PushFont(g_mdFonts.bold);
         }
@@ -1692,7 +1690,7 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
     ImVec2 iconSize(0, 0);
     if (hasIcon)
     {
-        if (config.iconSolid)
+        if (config.iconSolid.value())
         {
             ImGui::PushFont(g_iconFonts.solid);
         }
@@ -1705,12 +1703,39 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
     }
 
     // Calculate total content width and height
-    float contentWidth = hasIcon && hasLabel ? iconSize.x + labelSize.x + config.gap.value() : (hasIcon ? iconSize.x : labelSize.x);
+    float contentWidth = 0.0f;
+    if (hasIcon && hasLabel)
+    {
+        contentWidth = iconSize.x + config.gap.value_or(0.0f) + labelSize.x;
+    }
+    else if (hasIcon)
+    {
+        contentWidth = iconSize.x;
+    }
+    else if (hasLabel)
+    {
+        contentWidth = labelSize.x;
+    }
     float contentHeight = std::max(labelSize.y, iconSize.y);
 
-    // Calculate horizontal and vertical offsets to center content
+    // Calculate vertical offset to center content
     float verticalOffset = rectMin.y + (rectSize.y - contentHeight) / 2.0f;
-    float horizontalOffset = rectMin.x + (rectSize.x - contentWidth) / 2.0f;
+
+    // Calculate horizontal offset based on alignment
+    float horizontalOffset = rectMin.x; // Default to left alignment
+    Alignment alignment = config.alignment.value_or(Alignment::LEFT);
+    switch (alignment)
+    {
+    case Alignment::CENTER:
+        horizontalOffset = rectMin.x + (rectSize.x - contentWidth) / 2.0f;
+        break;
+    case Alignment::RIGHT:
+        horizontalOffset = rectMin.x + (rectSize.x - contentWidth) - config.gap.value_or(5.0f);
+        break;
+    default:
+        horizontalOffset = rectMin.x + config.gap.value_or(5.0f);
+        break;
+    }
 
     // Set the cursor position to the calculated offsets
     ImGui::SetCursorScreenPos(ImVec2(horizontalOffset, verticalOffset));
@@ -1718,7 +1743,7 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
     // Now render the icon and/or label
     if (hasIcon)
     {
-        if (config.iconSolid)
+        if (config.iconSolid.value())
         {
             ImGui::PushFont(g_iconFonts.solid);
         }
@@ -1728,7 +1753,10 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
         }
 
         ImGui::TextUnformatted(config.icon.value().c_str());
-        ImGui::SameLine(0, config.gap.value() * static_cast<float>(hasLabel)); // Only add gap if label exists
+        if (hasLabel)
+        {
+            ImGui::SameLine(0.0f, config.gap.value_or(0.0f));
+        }
 
         ImGui::PopFont(); // Pop icon font
     }
@@ -1736,7 +1764,7 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
     // Render label text with specified font weight, if it exists
     if (hasLabel)
     {
-        if (config.isBold)
+        if (config.isBold.value())
         {
             ImGui::PushFont(g_mdFonts.bold);
         }
